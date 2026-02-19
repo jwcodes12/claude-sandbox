@@ -1,65 +1,154 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useState } from 'react';
+import MarketRow from './components/MarketRow';
+import DetailView from './components/DetailView';
+import {
+  fetchMarketBySlug,
+  searchMarkets,
+  fetchBets,
+  betsToSeries,
+  type Market,
+  type ProbPoint,
+} from './lib/manifold';
+
+const PINNED_SLUGS = [
+  'will-we-get-agi-before-2030',
+  'will-we-develop-leopolds-dropin-rem',
+];
 
 export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+  const [markets, setMarkets] = useState<Market[]>([]);
+  const [series, setSeries] = useState<Record<string, ProbPoint[]>>({});
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Market | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [pinnedResults, searched] = await Promise.all([
+          Promise.all(PINNED_SLUGS.map(s => fetchMarketBySlug(s).catch(() => null))),
+          searchMarkets().catch(() => [] as Market[]),
+        ]);
+
+        const pinnedMarkets = pinnedResults.filter((m): m is Market => m !== null);
+        const pinnedIds = new Set(pinnedMarkets.map(m => m.id));
+
+        const extras = (searched as Market[])
+          .filter(m => m.outcomeType === 'BINARY' && !pinnedIds.has(m.id))
+          .slice(0, 12 - pinnedMarkets.length);
+
+        const allMarkets = [...pinnedMarkets, ...extras];
+        setMarkets(allMarkets);
+
+        const betsAll = await Promise.all(
+          allMarkets.map(m => fetchBets(m.id).catch(() => []))
+        );
+
+        const seriesMap: Record<string, ProbPoint[]> = {};
+        allMarkets.forEach((m, i) => {
+          seriesMap[m.id] = betsToSeries(betsAll[i]);
+        });
+        setSeries(seriesMap);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const avgProb =
+    markets.length > 0
+      ? Math.round(markets.reduce((s, m) => s + m.probability * 100, 0) / markets.length)
+      : null;
+
+  const avgColor = avgProb !== null && avgProb >= 50 ? '#30D158' : '#FF453A';
+
+  if (selected) {
+    return (
+      <div style={{ maxWidth: 430, margin: '0 auto' }}>
+        <DetailView
+          market={selected}
+          series={series[selected.id] ?? []}
+          onBack={() => setSelected(null)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        background: '#000',
+        minHeight: '100vh',
+        color: '#fff',
+        maxWidth: 430,
+        margin: '0 auto',
+      }}
+    >
+      {/* Header */}
+      <div style={{ padding: '28px 16px 12px' }}>
+        <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.5 }}>AGI Markets</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5 }}>
+          <div className="pulse-dot" />
+          <span style={{ fontSize: 13, color: '#636366' }}>Live · Manifold Markets</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+
+      {/* Summary bar */}
+      <div
+        style={{
+          margin: '0 16px 12px',
+          background: '#1C1C1E',
+          borderRadius: 14,
+          padding: '14px 8px',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: avgColor }}>
+              {avgProb !== null ? `${avgProb}%` : '—'}
+            </div>
+            <div style={{ fontSize: 11, color: '#636366', marginTop: 3 }}>Avg Probability</div>
+          </div>
+          <div style={{ width: 1, height: 36, background: '#2C2C2E' }} />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>
+              {loading ? '—' : markets.length}
+            </div>
+            <div style={{ fontSize: 11, color: '#636366', marginTop: 3 }}>Markets</div>
+          </div>
+          <div style={{ width: 1, height: 36, background: '#2C2C2E' }} />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#636366' }}>~2027</div>
+            <div style={{ fontSize: 11, color: '#636366', marginTop: 3 }}>Consensus</div>
+          </div>
         </div>
-      </main>
+      </div>
+
+      {/* Market list */}
+      {loading ? (
+        <div
+          style={{
+            textAlign: 'center',
+            color: '#636366',
+            padding: '48px 16px',
+            fontSize: 15,
+          }}
+        >
+          Loading markets…
+        </div>
+      ) : (
+        markets.map((m, i) => (
+          <MarketRow
+            key={m.id}
+            market={m}
+            series={series[m.id] ?? []}
+            index={i}
+            onClick={() => setSelected(m)}
+          />
+        ))
+      )}
     </div>
   );
 }
