@@ -1,0 +1,21 @@
+{
+  "name": "@claude-sandbox/tech-radar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "worker": "node src/worker.js run",
+    "worker:force": "node src/worker.js run --force",
+    "fetch": "node src/worker.js fetch --force",
+    "build": "node src/worker.js build --force",
+    "dev": "node src/dev-server.js",
+    "check": "node --check src/*.js",
+    "run:deploy": "scripts/run-and-deploy.sh",
+    "deploy:netlify": "scripts/deploy-netlify.sh",
+    "deploy:vercel": "scripts/deploy-vercel.sh"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.2.5",
+    "yaml": "^2.7.0"
+  }
+}

@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -11,14 +11,19 @@
 !.yarn/versions
 
 # testing
-/coverage
+coverage
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build
+
+# generated app data
+apps/tech-radar/.data/
+apps/tech-radar/public/
+apps/tech-radar/research-notes/
 
 # misc
 .DS_Store
@@ -34,7 +39,7 @@ yarn-error.log*
 .env*
 
 # vercel
-.vercel
+.vercel/
 
 # typescript
 *.tsbuildinfo
