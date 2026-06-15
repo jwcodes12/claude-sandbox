@@ -40,18 +40,30 @@ The worker always produces deterministic fallback briefs. Model briefs are opt-i
 export TECH_RADAR_ENABLE_LLM=1
 ```
 
-By default (`TECH_RADAR_MODEL_PROVIDER=claude`) the worker shells out to the
-locally logged-in `claude` CLI, so no API key is needed; `codex` uses the Codex
-CLI the same way. To use the hosted HTTP APIs instead, set the provider and key:
+By default the worker uses a two-stage local-CLI pipeline:
 
 ```bash
-export TECH_RADAR_MODEL_PROVIDER=anthropic   # needs ANTHROPIC_API_KEY
-export TECH_RADAR_MODEL_PROVIDER=openai      # needs OPENAI_API_KEY
+export TECH_RADAR_WRITER_PROVIDER=codex
+export TECH_RADAR_EDITOR_PROVIDER=claude
+export TECH_RADAR_ENABLE_EDITOR=1
+```
+
+Codex receives the larger source bundle and writes the draft. Claude receives
+the draft plus compact source metadata and edits it for precision, tone, and
+caveats. Both use the locally logged-in CLIs, so no API key is needed.
+
+To use hosted HTTP APIs for either stage, set the provider and key:
+
+```bash
+export TECH_RADAR_WRITER_PROVIDER=anthropic   # needs ANTHROPIC_API_KEY
+export TECH_RADAR_EDITOR_PROVIDER=openai      # needs OPENAI_API_KEY
 ```
 
 Briefs are cached per topic cluster, so a scheduled run only generates briefs for
-new or changed topics. `TECH_RADAR_MAX_MODEL_BRIEFS` (default 12) caps generations
-per run; `TECH_RADAR_CLI_MODEL` optionally pins the CLI model.
+new or changed topics with the same writer/editor pipeline. `TECH_RADAR_MAX_MODEL_BRIEFS`
+(default 12) caps writer generations per run; `TECH_RADAR_CLI_MODEL` optionally
+pins the CLI model. If the editor fails, the worker publishes the writer draft
+and records `editorStatus: "failed"` plus `editorError` in the article JSON.
 
 ## Agent Workflow
 
