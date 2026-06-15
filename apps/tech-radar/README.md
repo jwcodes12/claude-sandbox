@@ -100,16 +100,24 @@ The output goes to `research-notes/` by default.
 
 ## Deploy
 
-Netlify default:
+Scheduled deploys run through `npm run run:deploy -w @claude-sandbox/tech-radar`.
+That command rebuilds only when the scheduler allows it, compares the generated
+`public/data/topics.json` timestamp, and deploys only when a new build was
+written. Manual deploys should only be needed for previews, testing, or recovery.
+
+Vercel:
 
 ```bash
-NETLIFY_SITE_ID=... NETLIFY_AUTH_TOKEN=... npm run deploy:netlify -w @claude-sandbox/tech-radar
+TECH_RADAR_DEPLOY_PROVIDER=vercel VERCEL_TOKEN=... npm run run:deploy -w @claude-sandbox/tech-radar
 ```
 
-Vercel optional:
+`VERCEL_SCOPE` is optional when the token belongs to the intended account/team or
+the project is already linked in `.vercel/project.json`.
+
+Netlify fallback:
 
 ```bash
-VERCEL_TOKEN=... npm run deploy:vercel -w @claude-sandbox/tech-radar
+TECH_RADAR_DEPLOY_PROVIDER=netlify NETLIFY_SITE_ID=... NETLIFY_AUTH_TOKEN=... npm run run:deploy -w @claude-sandbox/tech-radar
 ```
 
 ## OCI

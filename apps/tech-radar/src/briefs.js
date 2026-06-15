@@ -62,7 +62,10 @@ export async function attachBriefs(topics, config, cache = new Map()) {
     try {
       const article = await generateBrief(topic, config, promptTemplate, editTemplate);
       generated += 1;
-      output.push({ ...topic, article: { ...fallbackArticle(topic), ...article, mode: 'model', pipelineKey } });
+      const merged = { ...fallbackArticle(topic), ...article, mode: 'model', pipelineKey };
+      merged.shortTake = article.summary ?? merged.shortTake;
+      merged.whyHot = article.summary ?? merged.whyHot;
+      output.push({ ...topic, article: merged });
     } catch (error) {
       console.warn(`[brief] ${topic.slug}: ${error.message}`);
       output.push({ ...topic, article: { ...fallbackArticle(topic), modelError: error.message } });
@@ -161,7 +164,7 @@ function briefPipelineKey(config) {
   const writerProvider = modelProvider(config, 'writer');
   const editorProvider = shouldEdit(config, modelProvider(config, 'editor')) ? modelProvider(config, 'editor') : 'none';
   return [
-    'v2',
+    'v3',
     `writer=${writerProvider}`,
     `editor=${editorProvider}`,
     `cliModel=${models.cliModel || ''}`,

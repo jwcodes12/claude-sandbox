@@ -181,13 +181,9 @@ function topicLane(items) {
 
 export function fallbackArticle(topic) {
   const sourceNames = [...new Set(topic.items.map((item) => item.sourceTitle))];
-  const sourceKinds = [...new Set(topic.items.map((item) => item.sourceKind))];
   const lane = topic.lane ?? topicLane(topic.items);
-  const sourceLine = sourceNames.length > 1
-    ? `${sourceNames.slice(0, 4).join(', ')} are pointing at the same story.`
-    : `${sourceNames[0] ?? 'One source'} surfaced this item.`;
   const lead = topic.items[0];
-  const leadSummary = digestLeadText(lead, topic);
+  const summary = digestSummary(lead, topic, sourceNames);
   return {
     id: topic.id,
     slug: topic.slug,
@@ -196,12 +192,11 @@ export function fallbackArticle(topic) {
     hotness: topic.hotness,
     updatedAt: new Date().toISOString(),
     mode: 'digest',
-    whyHot: sourceLine,
-    shortTake: leadSummary,
-    balancedTake: balancedDigestTake(lane, sourceKinds),
-    strongestCase: concreteCase(topic.items),
-    strongestCountercase: concreteCountercase(topic.items),
-    researchQuestions: digestQuestions(lane),
+    summary,
+    // shortTake / whyHot kept for the topic-list preview in build-site.js.
+    shortTake: summary,
+    whyHot: summary,
+    body: digestBody(topic, sourceNames),
     keywords: topic.keywords,
     sources: topic.items.map((item) => ({
       id: item.id,
@@ -211,59 +206,61 @@ export function fallbackArticle(topic) {
       author: item.author,
       url: item.url,
       publishedAt: item.publishedAt,
+      text: sourceFullText(item),
       excerpt: excerpt(item.summary || item.contentText, 520),
     })),
   };
 }
 
-function digestLeadText(item, topic) {
-  const cleaned = cleanFeedTitle(item?.contentText || item?.summary || item?.title || topic.title);
-  if (!weakTitle(cleaned)) return excerpt(cleaned, 520);
-  return excerpt(readableTitle(item) || topic.title, 520);
+// One or two sentences framing the topic for the list preview and body intro.
+function digestSummary(lead, topic, sourceNames) {
+  const leadRaw = cleanFeedTitle(lead?.contentText || lead?.summary || lead?.title || topic.title);
+  const leadText = weakTitle(leadRaw) ? (readableTitle(lead) || topic.title) : leadRaw;
+  const who = sourceNames.length > 1
+    ? `${sourceNames.slice(0, 3).join(', ')} are converging on this.`
+    : `${sourceNames[0] ?? 'One source'} surfaced this.`;
+  return `${who} ${excerpt(leadText, 240)}`.replace(/\s+/g, ' ').trim();
 }
 
-function balancedDigestTake(lane, sourceKinds) {
-  if (lane === 'takes') {
-    return 'This is a take cluster, so treat the post text as signal about what people are reacting to, not proof that the underlying claim is settled.';
+// Deterministic Zvi-style roundup: framing line, then each source quoted verbatim
+// as an attributed blockquote.
+function digestBody(topic, sourceNames) {
+  const intro = sourceNames.length > 1
+    ? `${sourceNames.slice(0, 3).join(', ')} are converging on this.`
+    : `${sourceNames[0] ?? 'One source'} surfaced this.`;
+  const blocks = [intro];
+  for (const item of topic.items.slice(0, 8)) {
+    const quote = quoteText(item);
+    if (!quote) continue;
+    const who = String(item.author || item.sourceTitle || 'source').trim();
+    const quoted = quote.split('\n').map((line) => `> ${line}`.replace(/\s+$/, '')).join('\n');
+    blocks.push(`${quoted}\n>\n> \u2014 [${mdEscape(who)}](${item.url})`);
   }
-  if (lane === 'research') {
-    return 'This is a research/source cluster. The useful next step is checking the primary paper, benchmark, or release note before accepting social summaries.';
-  }
-  const kinds = sourceKinds.includes('community') ? 'community discussion' : 'source coverage';
-  return `This is ${kinds}, not a finished analysis. It belongs in the news lane until it draws enough high-quality commentary or primary-source detail.`;
+  return blocks.join('\n\n');
 }
 
-function concreteCase(items) {
-  const sourceNames = [...new Set(items.map((item) => item.sourceTitle))];
-  if (sourceNames.length > 1) return `It appears across ${sourceNames.slice(0, 3).join(', ')}, which makes it less likely to be a single-feed artifact.`;
-  return 'The lead item is recent enough and relevant enough to keep on the radar.';
+// Tweets are quoted in full (the point is to see the whole take); long blog/article
+// bodies are trimmed.
+function quoteText(item) {
+  const raw = sourceTextCandidate(item);
+  if (!raw) return '';
+  if (item.sourceKind === 'twitter') return raw.replace(/\n{3,}/g, '\n\n');
+  return excerpt(raw, 700);
 }
 
-function concreteCountercase(items) {
-  const twitterCount = items.filter((item) => item.sourceKind === 'twitter').length;
-  if (twitterCount === items.length) return 'The cluster is entirely Twitter-sourced, so quote-tweets and repost chains may be inflating it.';
-  if (items.length === 1) return 'There is only one item in the cluster, so it may not deserve a full brief yet.';
-  return 'The sources may be repeating the same upstream link rather than adding independent reporting or technical detail.';
+function sourceFullText(item) {
+  const raw = sourceTextCandidate(item);
+  if (item.sourceKind === 'twitter') return raw;
+  return excerpt(raw, 1200);
 }
 
-function digestQuestions(lane) {
-  if (lane === 'takes') {
-    return [
-      'What exact claim are people reacting to?',
-      'Is there a primary source behind the quote-tweet chain?',
-      'Which credible counter-take is missing from the cluster?',
-    ];
-  }
-  if (lane === 'research') {
-    return [
-      'What does the primary paper or release actually claim?',
-      'Are there independent replications, benchmarks, or critiques?',
-      'What assumption would change the practical takeaway?',
-    ];
-  }
-  return [
-    'What is the original source?',
-    'Is there independent reporting or just repeated aggregation?',
-    'Does this matter beyond the immediate product or platform news cycle?',
-  ];
+function sourceTextCandidate(item) {
+  const raw = stripHtml(item.contentText || item.summary || item.title || '').trim();
+  const cleaned = cleanFeedTitle(raw);
+  if (!weakTitle(cleaned)) return raw;
+  return readableTitle(item) || cleaned || raw;
+}
+
+function mdEscape(text) {
+  return String(text).replace(/[\[\]()]/g, '\\$&');
 }
