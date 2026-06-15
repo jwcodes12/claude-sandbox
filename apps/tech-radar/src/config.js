@@ -65,7 +65,10 @@ export function loadConfig() {
       },
       models: {
         enabled: false,
-        provider: 'anthropic',
+        provider: '',
+        writerProvider: 'codex',
+        editorProvider: 'claude',
+        enableEditor: true,
         smallModel: 'claude-3-5-haiku-latest',
         largeModel: 'claude-opus-4-1',
         cliModel: '',

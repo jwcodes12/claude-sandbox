@@ -10,6 +10,7 @@ import { resolveFromRoot } from './paths.js';
 // their existing model brief instead of paying for a fresh generation each run.
 export async function attachBriefs(topics, config, cache = new Map()) {
   const shouldUseModel = Boolean(config.settings.models.enabled) && process.env.TECH_RADAR_ENABLE_LLM === '1';
+  const pipelineKey = briefPipelineKey(config);
   const eligibleTopics = topics.map((topic) => ({
     ...topic,
     needsModel: topic.hotness >= config.settings.ranking.minHotnessForBrief &&
@@ -24,6 +25,7 @@ export async function attachBriefs(topics, config, cache = new Map()) {
   }
 
   const promptTemplate = fs.readFileSync(resolveFromRoot('prompts/topic-brief.md'), 'utf8');
+  const editTemplate = fs.readFileSync(resolveFromRoot('prompts/topic-edit.md'), 'utf8');
   const maxBriefs = Number(config.settings.ranking.maxModelBriefs ?? 12);
   const output = [];
   let generated = 0;
@@ -36,7 +38,7 @@ export async function attachBriefs(topics, config, cache = new Map()) {
 
     // Reuse a cached model brief when the cluster (and thus topic.id) is unchanged.
     const cached = cache.get(topic.id);
-    if (cached && cached.mode === 'model') {
+    if (cached && cached.mode === 'model' && cached.pipelineKey === pipelineKey) {
       output.push({ ...topic, article: { ...cached, updatedAt: cached.updatedAt } });
       continue;
     }
@@ -48,9 +50,9 @@ export async function attachBriefs(topics, config, cache = new Map()) {
     }
 
     try {
-      const article = await generateBrief(topic, config, promptTemplate);
+      const article = await generateBrief(topic, config, promptTemplate, editTemplate);
       generated += 1;
-      output.push({ ...topic, article: { ...fallbackArticle(topic), ...article, mode: 'model' } });
+      output.push({ ...topic, article: { ...fallbackArticle(topic), ...article, mode: 'model', pipelineKey } });
     } catch (error) {
       console.warn(`[brief] ${topic.slug}: ${error.message}`);
       output.push({ ...topic, article: { ...fallbackArticle(topic), modelError: error.message } });
@@ -59,24 +61,107 @@ export async function attachBriefs(topics, config, cache = new Map()) {
   return output;
 }
 
-async function generateBrief(topic, config, promptTemplate) {
+async function generateBrief(topic, config, promptTemplate, editTemplate) {
+  const sourcePayload = topicSourcePayload(topic);
   const input = promptTemplate
-    .replace('{{TOPIC_JSON}}', JSON.stringify({
+    .replace('{{TOPIC_JSON}}', JSON.stringify(sourcePayload, null, 2));
+
+  const writerProvider = modelProvider(config, 'writer');
+  const editorProvider = modelProvider(config, 'editor');
+  const writerDraft = await generateWithProvider(writerProvider, input, config);
+
+  if (!shouldEdit(config, editorProvider)) {
+    return {
+      ...writerDraft,
+      writerDraft,
+      writerProvider,
+      editorProvider: null,
+      editorStatus: 'skipped',
+    };
+  }
+
+  const editInput = editTemplate.replace('{{EDIT_JSON}}', JSON.stringify({
+    topic: {
       title: topic.title,
       hotness: topic.hotness,
       keywords: topic.keywords,
-      sources: topic.items.map((item) => ({
-        title: item.title,
-        source: item.sourceTitle,
-        sourceKind: item.sourceKind,
-        author: item.author,
-        url: item.url,
-        publishedAt: item.publishedAt,
-        text: item.contentText || item.summary,
-      })),
-    }, null, 2));
+    },
+    draft: writerDraft,
+    sources: sourcePayload.sources.map((source) => ({
+      title: source.title,
+      source: source.source,
+      sourceKind: source.sourceKind,
+      author: source.author,
+      url: source.url,
+      publishedAt: source.publishedAt,
+    })),
+  }, null, 2));
 
-  switch (config.settings.models.provider) {
+  try {
+    const edited = await generateWithProvider(editorProvider, editInput, config);
+    return {
+      ...edited,
+      writerDraft,
+      writerProvider,
+      editorProvider,
+      editorStatus: 'edited',
+    };
+  } catch (error) {
+    return {
+      ...writerDraft,
+      writerDraft,
+      writerProvider,
+      editorProvider,
+      editorStatus: 'failed',
+      editorError: error.message,
+    };
+  }
+}
+
+function topicSourcePayload(topic) {
+  return {
+    title: topic.title,
+    hotness: topic.hotness,
+    keywords: topic.keywords,
+    sources: topic.items.map((item) => ({
+      title: item.title,
+      source: item.sourceTitle,
+      sourceKind: item.sourceKind,
+      author: item.author,
+      url: item.url,
+      publishedAt: item.publishedAt,
+      text: item.contentText || item.summary,
+    })),
+  };
+}
+
+function modelProvider(config, stage) {
+  const models = config.settings.models;
+  const provider = stage === 'editor' ? models.editorProvider : models.writerProvider;
+  return String(provider || models.provider || (stage === 'editor' ? 'claude' : 'codex')).toLowerCase();
+}
+
+function shouldEdit(config, editorProvider) {
+  if (!config.settings.models.enableEditor) return false;
+  return editorProvider && editorProvider !== 'none' && editorProvider !== 'off' && editorProvider !== 'false';
+}
+
+function briefPipelineKey(config) {
+  const models = config.settings.models;
+  const writerProvider = modelProvider(config, 'writer');
+  const editorProvider = shouldEdit(config, modelProvider(config, 'editor')) ? modelProvider(config, 'editor') : 'none';
+  return [
+    'v2',
+    `writer=${writerProvider}`,
+    `editor=${editorProvider}`,
+    `cliModel=${models.cliModel || ''}`,
+    `small=${models.smallModel || ''}`,
+    `large=${models.largeModel || ''}`,
+  ].join('|');
+}
+
+async function generateWithProvider(provider, input, config) {
+  switch (provider) {
     case 'openai':
       return generateOpenAI(input, config);
     case 'claude':
@@ -85,8 +170,11 @@ async function generateBrief(topic, config, promptTemplate) {
     case 'codex':
     case 'codex-cli':
       return generateCodexCli(input, config);
-    default:
+    case 'anthropic':
+    case '':
       return generateAnthropic(input, config);
+    default:
+      throw new Error(`unknown model provider: ${provider}`);
   }
 }
 
