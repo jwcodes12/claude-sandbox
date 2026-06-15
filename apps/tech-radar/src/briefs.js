@@ -1,8 +1,14 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { fallbackArticle } from './cluster.js';
 import { resolveFromRoot } from './paths.js';
 
-export async function attachBriefs(topics, config) {
+// `cache` maps topic.id -> previous article, so unchanged topic clusters reuse
+// their existing model brief instead of paying for a fresh generation each run.
+export async function attachBriefs(topics, config, cache = new Map()) {
   const shouldUseModel = Boolean(config.settings.models.enabled) && process.env.TECH_RADAR_ENABLE_LLM === '1';
   const eligibleTopics = topics.map((topic) => ({
     ...topic,
@@ -18,15 +24,32 @@ export async function attachBriefs(topics, config) {
   }
 
   const promptTemplate = fs.readFileSync(resolveFromRoot('prompts/topic-brief.md'), 'utf8');
+  const maxBriefs = Number(config.settings.ranking.maxModelBriefs ?? 12);
   const output = [];
+  let generated = 0;
+
   for (const topic of eligibleTopics) {
     if (!topic.needsModel) {
       output.push({ ...topic, article: fallbackArticle(topic) });
       continue;
     }
 
+    // Reuse a cached model brief when the cluster (and thus topic.id) is unchanged.
+    const cached = cache.get(topic.id);
+    if (cached && cached.mode === 'model') {
+      output.push({ ...topic, article: { ...cached, updatedAt: cached.updatedAt } });
+      continue;
+    }
+
+    // Stay within the per-run generation budget; overflow falls back deterministically.
+    if (generated >= maxBriefs) {
+      output.push({ ...topic, article: fallbackArticle(topic) });
+      continue;
+    }
+
     try {
       const article = await generateBrief(topic, config, promptTemplate);
+      generated += 1;
       output.push({ ...topic, article: { ...fallbackArticle(topic), ...article, mode: 'model' } });
     } catch (error) {
       console.warn(`[brief] ${topic.slug}: ${error.message}`);
@@ -53,10 +76,74 @@ async function generateBrief(topic, config, promptTemplate) {
       })),
     }, null, 2));
 
-  const provider = config.settings.models.provider;
-  if (provider === 'openai') return generateOpenAI(input, config);
-  return generateAnthropic(input, config);
+  switch (config.settings.models.provider) {
+    case 'openai':
+      return generateOpenAI(input, config);
+    case 'claude':
+    case 'claude-cli':
+      return generateClaudeCli(input, config);
+    case 'codex':
+    case 'codex-cli':
+      return generateCodexCli(input, config);
+    default:
+      return generateAnthropic(input, config);
+  }
 }
+
+// --- CLI providers: use the locally logged-in claude / codex CLIs (subscription
+// auth, no API key needed). ---
+
+function cliTimeout(config) {
+  return Number(config.settings.models.cliTimeoutMs ?? 180_000);
+}
+
+async function generateClaudeCli(input, config) {
+  const args = ['-p', '--output-format', 'text'];
+  const model = config.settings.models.cliModel;
+  if (model) args.push('--model', String(model));
+  const text = await runCli('claude', args, input, cliTimeout(config));
+  return parseJson(text);
+}
+
+async function generateCodexCli(input, config) {
+  const outFile = path.join(os.tmpdir(), `tech-radar-brief-${crypto.randomUUID()}.txt`);
+  const args = ['exec', '--skip-git-repo-check', '-o', outFile];
+  const model = config.settings.models.cliModel;
+  if (model) args.push('-m', String(model));
+  try {
+    await runCli('codex', args, input, cliTimeout(config));
+    return parseJson(fs.readFileSync(outFile, 'utf8'));
+  } finally {
+    fs.rmSync(outFile, { force: true });
+  }
+}
+
+function runCli(command, args, input, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(new Error(`${command} failed to start: ${error.message}`));
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`${command} exited ${code}: ${stderr.slice(0, 300).trim()}`));
+    });
+    child.stdin.end(input);
+  });
+}
+
+// --- HTTP API providers (require API keys). ---
 
 async function generateAnthropic(input, config) {
   const apiKey = process.env.ANTHROPIC_API_KEY;

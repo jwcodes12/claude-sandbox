@@ -34,15 +34,24 @@ The default source mix is:
 
 ## Model Use
 
-The worker always produces deterministic fallback briefs. Model generation is opt-in:
+The worker always produces deterministic fallback briefs. Model briefs are opt-in:
 
 ```bash
 export TECH_RADAR_ENABLE_LLM=1
-export TECH_RADAR_MODEL_PROVIDER=anthropic
-export ANTHROPIC_API_KEY=...
 ```
 
-Set `TECH_RADAR_MODEL_PROVIDER=openai` and `OPENAI_API_KEY` to use OpenAI's Responses API path.
+By default (`TECH_RADAR_MODEL_PROVIDER=claude`) the worker shells out to the
+locally logged-in `claude` CLI, so no API key is needed; `codex` uses the Codex
+CLI the same way. To use the hosted HTTP APIs instead, set the provider and key:
+
+```bash
+export TECH_RADAR_MODEL_PROVIDER=anthropic   # needs ANTHROPIC_API_KEY
+export TECH_RADAR_MODEL_PROVIDER=openai      # needs OPENAI_API_KEY
+```
+
+Briefs are cached per topic cluster, so a scheduled run only generates briefs for
+new or changed topics. `TECH_RADAR_MAX_MODEL_BRIEFS` (default 12) caps generations
+per run; `TECH_RADAR_CLI_MODEL` optionally pins the CLI model.
 
 ## Agent Workflow
 
