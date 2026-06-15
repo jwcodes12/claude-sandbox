@@ -28,13 +28,15 @@ export function loadConfig() {
   const parsed = expandEnv(YAML.parse(fs.readFileSync(file, 'utf8')));
   const settings = parsed.settings ?? {};
   const sources = (parsed.sources ?? [])
-    .map((source) => ({
-      enabled: true,
-      weight: 1,
-      tags: [],
-      ...source,
-      url: String(source.url ?? '').trim(),
-    }))
+    .map((source) => {
+      const base = { enabled: true, weight: 1, tags: [], ...source };
+      const url = String(base.url ?? '').trim();
+      // Newsboat-backed sources read from the local sqlite cache and have no
+      // HTTP url; give them a synthetic, descriptive url so they still satisfy
+      // the sources table and pass the enabled/url filter below.
+      base.url = url || (base.newsboat ? `newsboat:${newsboatLabel(base.newsboat)}` : '');
+      return base;
+    })
     .filter((source) => source.enabled && source.url.length > 0);
 
   return {
@@ -67,6 +69,10 @@ export function loadConfig() {
         largeModel: 'claude-opus-4-1',
         ...(settings.models ?? {}),
       },
+      newsboat: {
+        cacheDb: '',
+        ...(settings.newsboat ?? {}),
+      },
       deploy: {
         provider: 'netlify',
         ...(settings.deploy ?? {}),
@@ -74,4 +80,10 @@ export function loadConfig() {
     },
     sources,
   };
+}
+
+function newsboatLabel(spec) {
+  if (spec.match) return spec.match;
+  if (Array.isArray(spec.feeds) && spec.feeds.length > 0) return spec.feeds.join(',');
+  return 'all';
 }

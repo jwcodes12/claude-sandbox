@@ -15,15 +15,16 @@ npm run dev -w @claude-sandbox/tech-radar
 
 ## Sources
 
-Edit `feeds.yaml`. Twitter feeds are disabled by default because they need your RSS bridge URL:
-
-```bash
-export TWITTER_TECH_LIST_RSS="https://..."
-```
+Edit `feeds.yaml`. Tech Twitter is ingested directly from the local newsboat
+`cache.db` (the curated list feed plus every followed account), so no Twitter/RSS
+bridge URLs are required — newsboat already polls those feeds. The Twitter source
+is on by default; set `TECH_RADAR_TWITTER=false` to disable it, or
+`NEWSBOAT_CACHE_DB` to point at a non-default cache path (defaults to
+`~/.newsboat/cache.db`).
 
 The default source mix is:
 
-- personal Twitter tech list RSS and optional account RSS bridge
+- Tech Twitter, read directly from the local newsboat cache.db
 - Hacker News and Lobsters
 - arXiv AI/ML/CL/SE
 - GitHub Blog and Changelog

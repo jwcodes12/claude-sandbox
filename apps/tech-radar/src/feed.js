@@ -1,5 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
-import { canonicalizeUrl, excerpt, hashText, stripHtml } from './text.js';
+import { excerpt, stripHtml } from './text.js';
+import { makeItem } from './item.js';
+import { ingestNewsboatSource } from './newsboat.js';
 import { getSourceState, updateSourceState, upsertItem } from './db.js';
 
 const parser = new XMLParser({
@@ -14,7 +16,9 @@ const parser = new XMLParser({
 export async function ingestFeeds(db, config) {
   const results = [];
   for (const source of config.sources) {
-    const result = await ingestFeed(db, source, config);
+    const result = source.newsboat
+      ? ingestNewsboatSource(db, source, config)
+      : await ingestFeed(db, source, config);
     results.push(result);
     console.log(`[feed] ${source.id}: ${result.status} ${result.items} items`);
   }
@@ -117,28 +121,6 @@ function normalizeAtom(feed, source) {
       raw: entry,
     });
   });
-}
-
-function makeItem({ source, title, url, author, summary, contentText, publishedAt, raw }) {
-  const canonicalUrl = canonicalizeUrl(url);
-  const id = hashText(`${source.id}:${canonicalUrl || title}`);
-  return {
-    id,
-    sourceId: source.id,
-    sourceTitle: source.title,
-    sourceKind: source.kind,
-    sourceWeight: Number(source.weight ?? 1),
-    title,
-    url,
-    canonicalUrl,
-    author,
-    summary,
-    contentText,
-    publishedAt,
-    fetchedAt: new Date().toISOString(),
-    tags: source.tags ?? [],
-    raw,
-  };
 }
 
 function asArray(value) {
