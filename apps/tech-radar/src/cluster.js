@@ -1,4 +1,4 @@
-import { excerpt, hashText, jaccard, keywordSet, slugify, topKeywords } from './text.js';
+import { excerpt, hashText, jaccard, keywordSet, slugify, stripHtml, topKeywords } from './text.js';
 
 export function buildTopics(items, config) {
   const threshold = config.settings.ranking.clusterSimilarity;
@@ -45,11 +45,13 @@ function makeTopic(cluster, config) {
   const title = chooseTitle(sortedItems, keywords);
   const slug = `${slugify(title)}-${hashText(sortedItems.map((item) => item.id).sort().join(':'), 8)}`;
   const hotness = scoreCluster(sortedItems);
+  const lane = topicLane(sortedItems);
 
   return {
     id: hashText(slug),
     slug,
     title,
+    lane,
     keywords,
     hotness: Math.round(hotness),
     items: sortedItems,
@@ -58,6 +60,7 @@ function makeTopic(cluster, config) {
       id: hashText(slug),
       slug,
       title,
+      lane,
       hotness: Math.round(hotness),
       keywords,
       items: sortedItems,
@@ -71,8 +74,70 @@ function chooseTitle(items, keywords) {
     if (sourceDelta !== 0) return sourceDelta;
     return Date.parse(b.publishedAt ?? b.fetchedAt) - Date.parse(a.publishedAt ?? a.fetchedAt);
   });
-  const title = weighted[0]?.title ?? keywords.join(' ');
+  const title = weighted.map(readableTitle).find(Boolean) ?? keywords.join(' ');
   return title.replace(/\s+/g, ' ').trim();
+}
+
+function readableTitle(item = {}) {
+  const cleaned = cleanFeedTitle(item.title);
+  if (!weakTitle(cleaned)) return cleaned;
+
+  const fallbackSource = stripHtml(item.contentText || item.summary || '');
+  const fallbackText = fallbackSource
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map(cleanFeedTitle)
+    .find((line) => !weakTitle(line));
+  return fallbackText || titleFromTextUrl(fallbackSource) || titleFromUrl(item.url) || cleaned || item.sourceTitle;
+}
+
+function cleanFeedTitle(title = '') {
+  return stripHtml(title)
+    .replace(/^(?:r|re|rt|qt)(?:\s+by)?\s+(?:to\s+)?@[A-Za-z0-9_]+:\s*/i, '')
+    .replace(/^@[A-Za-z0-9_]+:\s*/i, '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\b[a-z0-9.-]+\.[a-z]{2,}\/\S*/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function weakTitle(title = '') {
+  const clean = title.trim();
+  if (clean.length < 12) return true;
+  if (/^comments$/i.test(clean)) return true;
+  if (/^https?:\/\//i.test(clean)) return true;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?:\/|$)/i.test(clean)) return true;
+  return false;
+}
+
+function titleFromTextUrl(text = '') {
+  const match = stripHtml(text).match(/\b(?:https?:\/\/)?([a-z0-9.-]+\.[a-z]{2,})(\/[^\s]*)?/i);
+  if (!match) return '';
+  const host = match[1].replace(/^www\./, '');
+  if (host.includes('xcancel.com')) return '';
+  const pathTitle = bestPathTitle(match[2]);
+  return pathTitle ? `${pathTitle} (${host})` : `Link from ${host}`;
+}
+
+function titleFromUrl(url = '') {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, '');
+    const pathTitle = bestPathTitle(parsed.pathname);
+    return pathTitle ? `${pathTitle} (${host})` : host;
+  } catch {
+    return '';
+  }
+}
+
+function bestPathTitle(pathname = '') {
+  const generic = new Set(['article', 'blog', 'c', 'news', 'post', 'releases', 'stories', 'story', 'thread', 'writing']);
+  return String(pathname)
+    .split(/[/?#]/)[0]
+    .split('/')
+    .filter(Boolean)
+    .reverse()
+    .map((segment) => segment.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim())
+    .find((segment) => segment.length > 8 && !/^\d+$/.test(segment) && !generic.has(segment.toLowerCase())) ?? '';
 }
 
 function scoreItem(item) {
@@ -102,33 +167,45 @@ function scoreCluster(items) {
   );
 }
 
+function topicLane(items) {
+  const kindCounts = items.reduce((counts, item) => {
+    counts.set(item.sourceKind, (counts.get(item.sourceKind) ?? 0) + 1);
+    return counts;
+  }, new Map());
+  const twitterCount = kindCounts.get('twitter') ?? 0;
+  const researchCount = kindCounts.get('research') ?? 0;
+  if (twitterCount > 0 && twitterCount >= Math.max(1, items.length / 2)) return 'takes';
+  if (researchCount > 0 && researchCount >= Math.max(1, items.length / 3)) return 'research';
+  return 'news';
+}
+
 export function fallbackArticle(topic) {
   const sourceNames = [...new Set(topic.items.map((item) => item.sourceTitle))];
+  const sourceKinds = [...new Set(topic.items.map((item) => item.sourceKind))];
+  const lane = topic.lane ?? topicLane(topic.items);
   const sourceLine = sourceNames.length > 1
-    ? `${sourceNames.slice(0, 4).join(', ')} are all touching the same cluster.`
-    : `${sourceNames[0] ?? 'One source'} is carrying this cluster.`;
-  const leadSummary = excerpt(topic.items[0]?.summary || topic.items[0]?.contentText || topic.title, 420);
+    ? `${sourceNames.slice(0, 4).join(', ')} are pointing at the same story.`
+    : `${sourceNames[0] ?? 'One source'} surfaced this item.`;
+  const lead = topic.items[0];
+  const leadSummary = digestLeadText(lead, topic);
   return {
     id: topic.id,
     slug: topic.slug,
     title: topic.title,
+    lane,
     hotness: topic.hotness,
     updatedAt: new Date().toISOString(),
-    mode: 'deterministic',
+    mode: 'digest',
     whyHot: sourceLine,
     shortTake: leadSummary,
-    balancedTake: 'This topic is worth watching, but the current evidence is mostly source clustering and recency. Treat it as a prompt for follow-up rather than a settled conclusion.',
-    strongestCase: 'Multiple independent sources or communities are discussing adjacent claims.',
-    strongestCountercase: 'The cluster may be driven by reposting, a single launch cycle, or repeated commentary around one primary source.',
-    researchQuestions: [
-      'What is the original primary source?',
-      'Are independent technical details available?',
-      'Which claim would change the conclusion if false?',
-    ],
+    balancedTake: balancedDigestTake(lane, sourceKinds),
+    strongestCase: concreteCase(topic.items),
+    strongestCountercase: concreteCountercase(topic.items),
+    researchQuestions: digestQuestions(lane),
     keywords: topic.keywords,
     sources: topic.items.map((item) => ({
       id: item.id,
-      title: item.title,
+      title: readableTitle(item),
       source: item.sourceTitle,
       sourceKind: item.sourceKind,
       author: item.author,
@@ -137,4 +214,56 @@ export function fallbackArticle(topic) {
       excerpt: excerpt(item.summary || item.contentText, 520),
     })),
   };
+}
+
+function digestLeadText(item, topic) {
+  const cleaned = cleanFeedTitle(item?.contentText || item?.summary || item?.title || topic.title);
+  if (!weakTitle(cleaned)) return excerpt(cleaned, 520);
+  return excerpt(readableTitle(item) || topic.title, 520);
+}
+
+function balancedDigestTake(lane, sourceKinds) {
+  if (lane === 'takes') {
+    return 'This is a take cluster, so treat the post text as signal about what people are reacting to, not proof that the underlying claim is settled.';
+  }
+  if (lane === 'research') {
+    return 'This is a research/source cluster. The useful next step is checking the primary paper, benchmark, or release note before accepting social summaries.';
+  }
+  const kinds = sourceKinds.includes('community') ? 'community discussion' : 'source coverage';
+  return `This is ${kinds}, not a finished analysis. It belongs in the news lane until it draws enough high-quality commentary or primary-source detail.`;
+}
+
+function concreteCase(items) {
+  const sourceNames = [...new Set(items.map((item) => item.sourceTitle))];
+  if (sourceNames.length > 1) return `It appears across ${sourceNames.slice(0, 3).join(', ')}, which makes it less likely to be a single-feed artifact.`;
+  return 'The lead item is recent enough and relevant enough to keep on the radar.';
+}
+
+function concreteCountercase(items) {
+  const twitterCount = items.filter((item) => item.sourceKind === 'twitter').length;
+  if (twitterCount === items.length) return 'The cluster is entirely Twitter-sourced, so quote-tweets and repost chains may be inflating it.';
+  if (items.length === 1) return 'There is only one item in the cluster, so it may not deserve a full brief yet.';
+  return 'The sources may be repeating the same upstream link rather than adding independent reporting or technical detail.';
+}
+
+function digestQuestions(lane) {
+  if (lane === 'takes') {
+    return [
+      'What exact claim are people reacting to?',
+      'Is there a primary source behind the quote-tweet chain?',
+      'Which credible counter-take is missing from the cluster?',
+    ];
+  }
+  if (lane === 'research') {
+    return [
+      'What does the primary paper or release actually claim?',
+      'Are there independent replications, benchmarks, or critiques?',
+      'What assumption would change the practical takeaway?',
+    ];
+  }
+  return [
+    'What is the original source?',
+    'Is there independent reporting or just repeated aggregation?',
+    'Does this matter beyond the immediate product or platform news cycle?',
+  ];
 }
