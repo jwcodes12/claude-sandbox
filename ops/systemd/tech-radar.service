@@ -7,6 +7,9 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=%h/claude-sandbox
 EnvironmentFile=%h/.config/claude-sandbox/tech-radar.env
+# Homebrew bin must be on PATH so the nested npm/netlify/node calls inside
+# run-and-deploy.sh resolve under the minimal systemd user-service environment.
+Environment=PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/home/linuxbrew/.linuxbrew/bin/npm run run:deploy -w @claude-sandbox/tech-radar
 LockPersonality=yes
 NoNewPrivileges=yes
