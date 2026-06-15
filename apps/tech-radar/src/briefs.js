@@ -239,7 +239,8 @@ async function generateAgyCli(input, config, stage) {
     }
     args.push('--model', String(model));
   }
-  const text = await runCli('agy', args, input, cliTimeout(config));
+  const finalInput = input + '\n\nIMPORTANT: Do NOT use any tools. Return the JSON response directly without any additional explanation or wrapper.';
+  const text = await runCli('agy', args, finalInput, cliTimeout(config));
   return parseJson(text);
 }
 
@@ -282,7 +283,11 @@ async function generateCodexCli(input, config) {
 
 function runCli(command, args, input, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const options = { stdio: ['pipe', 'pipe', 'pipe'] };
+    if (command === 'agy') {
+      options.cwd = os.tmpdir();
+    }
+    const child = spawn(command, args, options);
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
