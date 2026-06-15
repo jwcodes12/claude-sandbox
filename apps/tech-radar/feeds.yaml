@@ -26,8 +26,11 @@ settings:
     writerProvider: ${TECH_RADAR_WRITER_PROVIDER:-codex}
     editorProvider: ${TECH_RADAR_EDITOR_PROVIDER:-claude}
     enableEditor: ${TECH_RADAR_ENABLE_EDITOR:-true}
-    smallModel: ${TECH_RADAR_SMALL_MODEL:-claude-3-5-haiku-latest}
-    largeModel: ${TECH_RADAR_LARGE_MODEL:-claude-opus-4-1}
+    smallModel: ${TECH_RADAR_SMALL_MODEL:-claude-haiku-4-5}
+    largeModel: ${TECH_RADAR_LARGE_MODEL:-claude-opus-4-8}
+    codexModel: ${TECH_RADAR_CODEX_MODEL:-gpt-5.5}
+    claudeModel: ${TECH_RADAR_CLAUDE_MODEL:-claude-opus-4-8}
+    claudeFallbackModel: ${TECH_RADAR_CLAUDE_FALLBACK_MODEL:-claude-sonnet-4-6}
     cliModel: ${TECH_RADAR_CLI_MODEL:-}
   newsboat:
     # Read tweets straight from the local newsboat sqlite cache.

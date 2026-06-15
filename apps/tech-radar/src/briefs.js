@@ -155,6 +155,9 @@ function briefPipelineKey(config) {
     `writer=${writerProvider}`,
     `editor=${editorProvider}`,
     `cliModel=${models.cliModel || ''}`,
+    `codexModel=${models.codexModel || ''}`,
+    `claudeModel=${models.claudeModel || ''}`,
+    `claudeFallbackModel=${models.claudeFallbackModel || ''}`,
     `small=${models.smallModel || ''}`,
     `large=${models.largeModel || ''}`,
   ].join('|');
@@ -185,10 +188,19 @@ function cliTimeout(config) {
   return Number(config.settings.models.cliTimeoutMs ?? 180_000);
 }
 
+function cliModel(config, provider) {
+  const models = config.settings.models;
+  if (provider === 'claude') return models.claudeModel || models.cliModel || '';
+  if (provider === 'codex') return models.codexModel || models.cliModel || '';
+  return models.cliModel || '';
+}
+
 async function generateClaudeCli(input, config) {
   const args = ['-p', '--output-format', 'text'];
-  const model = config.settings.models.cliModel;
+  const model = cliModel(config, 'claude');
   if (model) args.push('--model', String(model));
+  const fallbackModel = config.settings.models.claudeFallbackModel;
+  if (fallbackModel) args.push('--fallback-model', String(fallbackModel));
   const text = await runCli('claude', args, input, cliTimeout(config));
   return parseJson(text);
 }
@@ -196,7 +208,7 @@ async function generateClaudeCli(input, config) {
 async function generateCodexCli(input, config) {
   const outFile = path.join(os.tmpdir(), `tech-radar-brief-${crypto.randomUUID()}.txt`);
   const args = ['exec', '--skip-git-repo-check', '-o', outFile];
-  const model = config.settings.models.cliModel;
+  const model = cliModel(config, 'codex');
   if (model) args.push('-m', String(model));
   try {
     await runCli('codex', args, input, cliTimeout(config));
