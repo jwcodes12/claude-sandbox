@@ -75,6 +75,8 @@ export function loadConfig() {
         codexModel: 'gpt-5.5',
         claudeModel: 'claude-opus-4-8',
         claudeFallbackModel: 'claude-sonnet-4-6',
+        agyWriterModel: 'Gemini 3.5 Flash (Medium)',
+        agyEditorModel: 'Gemini 3.5 Flash (High)',
         cliTimeoutMs: 180000,
         ...(settings.models ?? {}),
       },
