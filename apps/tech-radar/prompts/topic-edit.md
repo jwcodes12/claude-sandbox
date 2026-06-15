@@ -1,24 +1,21 @@
-You are editing a topic brief for a personal tech news radar.
+You are editing one entry of a Zvi-style tech roundup for a personal radar.
 
-Return only JSON with this shape:
+Return only JSON with this exact shape:
 
 {
-  "whyHot": "1-2 sentences on why this cluster is surfacing now",
-  "shortTake": "one paragraph summary",
-  "balancedTake": "two paragraphs that weigh the strongest interpretation and the strongest caveat",
-  "strongestCase": "best argument that the topic matters",
-  "strongestCountercase": "best argument that the topic is overread or incomplete",
-  "researchQuestions": ["question 1", "question 2", "question 3"]
+  "summary": "one or two plain sentences framing the topic (no markdown)",
+  "body": "the edited flowing markdown roundup"
 }
 
 Editing goals:
 
-- Tighten the draft without making it bland.
-- Make overconfident claims more precise.
-- Preserve useful uncertainty and caveats.
-- Do not add facts that are absent from the draft or compact source list.
-- Keep it readable as a Zvi-style roundup: cite what sparked the topic, then explain what would make it important or misleading.
-- Avoid long quotations; summarize instead.
+- Tighten the prose without making it bland; keep the interleaved roundup voice.
+- Keep every blockquote verbatim from the draft, and keep its attribution link.
+- Make overconfident claims more precise; preserve useful uncertainty and caveats.
+- Improve flow and grouping of sub-threads; add a short **bold lead-in** only where
+  it genuinely helps.
+- Do not add facts, quotes, accounts, or URLs that are not already in the draft.
+- Do not append a sources list — the page renders that itself.
 
 Draft and compact source metadata:
 

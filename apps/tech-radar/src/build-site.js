@@ -24,6 +24,7 @@ export function buildSite(db, config) {
     updatedAt: topic.updatedAt,
     lane: topic.article.lane ?? 'news',
     mode: topic.article.mode ?? 'digest',
+    summary: topic.article.summary ?? topic.article.shortTake,
     whyHot: topic.article.whyHot,
     shortTake: topic.article.shortTake,
     sourceCount: topic.article.sources?.length ?? 0,
