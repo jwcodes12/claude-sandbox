@@ -46,14 +46,17 @@ export default function Chart({ data }: { data: ProbPoint[] }) {
   }, []);
 
   const chartW = width - PAD_L - PAD_R;
+  const latestTime = useMemo(() => {
+    if (data.length === 0) return null;
+    return Math.max(...data.map(p => p.t));
+  }, [data]);
 
   const filtered = useMemo(() => {
     const ms = RANGE_MS[range];
-    const now = Date.now();
-    const raw = ms === Infinity ? data : data.filter(p => p.t >= now - ms);
+    const raw = ms === Infinity || latestTime === null ? data : data.filter(p => p.t >= latestTime - ms);
     const src = raw.length >= 2 ? raw : data;
     return downsample(src, 400);
-  }, [data, range]);
+  }, [data, latestTime, range]);
 
   const { yMin, yMax } = useMemo(() => {
     if (filtered.length === 0) return { yMin: 0, yMax: 100 };

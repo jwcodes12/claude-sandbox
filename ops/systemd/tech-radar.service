@@ -1,0 +1,12 @@
+[Unit]
+Description=Claude Sandbox Tech Radar worker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/claude-sandbox
+EnvironmentFile=%h/.config/claude-sandbox/tech-radar.env
+ExecStart=/home/linuxbrew/.linuxbrew/bin/npm run run:deploy -w @claude-sandbox/tech-radar
+LockPersonality=yes
+NoNewPrivileges=yes

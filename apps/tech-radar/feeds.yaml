@@ -1,0 +1,163 @@
+settings:
+  title: Tech Radar
+  description: Rolling clustered briefings from tech Twitter, blogs, research feeds, and developer news.
+  lookbackHours: 96
+  maxItemsPerFeed: 40
+  maxTopics: 24
+  maxTopicItems: 14
+  schedule:
+    timezone: America/New_York
+    peakStartHour: 8
+    peakEndHour: 23
+    offPeakMinimumMinutes: 60
+  ranking:
+    clusterSimilarity: 0.22
+    minHotnessForBrief: 24
+    minItemsForBrief: 2
+  models:
+    enabled: ${TECH_RADAR_ENABLE_LLM:-false}
+    provider: ${TECH_RADAR_MODEL_PROVIDER:-anthropic}
+    smallModel: ${TECH_RADAR_SMALL_MODEL:-claude-3-5-haiku-latest}
+    largeModel: ${TECH_RADAR_LARGE_MODEL:-claude-opus-4-1}
+  newsboat:
+    # Read tweets straight from the local newsboat sqlite cache.
+    # Empty -> NEWSBOAT_CACHE_DB env, then ~/.newsboat/cache.db.
+    cacheDb: ${NEWSBOAT_CACHE_DB:-}
+  deploy:
+    provider: ${TECH_RADAR_DEPLOY_PROVIDER:-netlify}
+
+sources:
+  # Tech Twitter, ingested directly from newsboat's cache.db (the curated "Tech"
+  # list feed plus all individually-followed accounts). This supersedes the old
+  # TWITTER_TECH_LIST_RSS / TWITTER_AI_WATCH_RSS HTTP bridges: newsboat already
+  # polls these feeds, so no bridge URLs or extra env vars are required. Set
+  # TECH_RADAR_TWITTER=false to disable.
+  - id: twitter-watchlist
+    title: Tech Twitter
+    kind: twitter
+    enabled: ${TECH_RADAR_TWITTER:-true}
+    weight: 2.2
+    tags: [twitter, ai, takes]
+    newsboat:
+      match: 'xcancel\.com/'
+      maxItems: 250
+
+  - id: hacker-news
+    title: Hacker News
+    kind: community
+    url: https://news.ycombinator.com/rss
+    enabled: true
+    weight: 1.2
+    tags: [tech, startups, developer]
+
+  - id: lobsters
+    title: Lobsters
+    kind: community
+    url: https://lobste.rs/rss
+    enabled: true
+    weight: 1.0
+    tags: [developer, programming]
+
+  - id: arxiv-ai
+    title: arXiv AI and ML
+    kind: research
+    url: https://rss.arxiv.org/rss/cs.AI+cs.LG+cs.CL+cs.SE
+    enabled: true
+    weight: 1.35
+    tags: [ai, research, papers]
+
+  - id: github-blog
+    title: GitHub Blog
+    kind: company-blog
+    url: https://github.blog/feed/
+    enabled: true
+    weight: 1.0
+    tags: [developer, github]
+
+  - id: github-changelog
+    title: GitHub Changelog
+    kind: company-blog
+    url: https://github.blog/changelog/feed/
+    enabled: true
+    weight: 1.05
+    tags: [developer, github, releases]
+
+  - id: openai-news
+    title: OpenAI News
+    kind: company-blog
+    url: https://openai.com/news/rss.xml
+    enabled: true
+    weight: 1.6
+    tags: [ai, lab]
+
+  - id: anthropic-news
+    title: Anthropic News
+    kind: company-blog
+    url: https://www.anthropic.com/news/rss.xml
+    enabled: false
+    weight: 1.6
+    tags: [ai, lab]
+
+  - id: deepmind-blog
+    title: Google DeepMind Blog
+    kind: company-blog
+    url: https://deepmind.google/blog/rss.xml
+    enabled: true
+    weight: 1.45
+    tags: [ai, lab, research]
+
+  - id: huggingface-blog
+    title: Hugging Face Blog
+    kind: company-blog
+    url: https://huggingface.co/blog/feed.xml
+    enabled: true
+    weight: 1.25
+    tags: [ai, open-source, models]
+
+  - id: simon-willison
+    title: Simon Willison
+    kind: individual-blog
+    url: https://simonwillison.net/atom/everything/
+    enabled: true
+    weight: 1.35
+    tags: [ai, developer, analysis]
+
+  - id: latent-space
+    title: Latent Space
+    kind: commentary
+    url: https://www.latent.space/feed
+    enabled: true
+    weight: 1.25
+    tags: [ai, commentary]
+
+  - id: interconnects
+    title: Interconnects
+    kind: commentary
+    url: https://www.interconnects.ai/feed
+    enabled: true
+    weight: 1.25
+    tags: [ai, commentary]
+
+  - id: lesswrong-curated
+    title: LessWrong Curated
+    kind: commentary
+    url: https://www.lesswrong.com/feed.xml?view=curated-rss
+    enabled: true
+    weight: 1.15
+    tags: [ai, alignment, rationality]
+
+  - id: zvi
+    title: Don't Worry About the Vase
+    kind: commentary
+    url: https://thezvi.substack.com/feed
+    enabled: true
+    weight: 1.35
+    tags: [ai, commentary, risk]
+
+  - id: techmeme
+    title: Techmeme
+    kind: news
+    url: https://www.techmeme.com/feed.xml
+    enabled: true
+    weight: 1.05
+    tags: [tech, news]

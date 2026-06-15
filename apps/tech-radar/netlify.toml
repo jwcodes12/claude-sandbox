@@ -1,0 +1,13 @@
+[build]
+  publish = "public"
+  command = "npm run worker:force"
+
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=60, stale-while-revalidate=600"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=300"
