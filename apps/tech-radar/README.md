@@ -46,11 +46,16 @@ By default the worker uses a two-stage local-CLI pipeline:
 export TECH_RADAR_WRITER_PROVIDER=codex
 export TECH_RADAR_EDITOR_PROVIDER=claude
 export TECH_RADAR_ENABLE_EDITOR=1
+export TECH_RADAR_CODEX_MODEL=gpt-5.5
+export TECH_RADAR_CLAUDE_MODEL=claude-opus-4-8
+export TECH_RADAR_CLAUDE_FALLBACK_MODEL=claude-sonnet-4-6
 ```
 
 Codex receives the larger source bundle and writes the draft. Claude receives
 the draft plus compact source metadata and edits it for precision, tone, and
-caveats. Both use the locally logged-in CLIs, so no API key is needed.
+caveats. Both use the locally logged-in CLIs, so no API key is needed. By
+default, Codex is pinned to `gpt-5.5`; Claude is pinned to `claude-opus-4-8`
+with `claude-sonnet-4-6` as the print-mode fallback.
 
 To use hosted HTTP APIs for either stage, set the provider and key:
 
@@ -61,9 +66,12 @@ export TECH_RADAR_EDITOR_PROVIDER=openai      # needs OPENAI_API_KEY
 
 Briefs are cached per topic cluster, so a scheduled run only generates briefs for
 new or changed topics with the same writer/editor pipeline. `TECH_RADAR_MAX_MODEL_BRIEFS`
-(default 12) caps writer generations per run; `TECH_RADAR_CLI_MODEL` optionally
-pins the CLI model. If the editor fails, the worker publishes the writer draft
-and records `editorStatus: "failed"` plus `editorError` in the article JSON.
+(default 12) caps writer generations per run. `TECH_RADAR_CODEX_MODEL`,
+`TECH_RADAR_CLAUDE_MODEL`, and `TECH_RADAR_CLAUDE_FALLBACK_MODEL` pin the CLI
+models; `TECH_RADAR_CLI_MODEL` remains as a backward-compatible fallback when a
+provider-specific value is empty. If the editor fails, the worker publishes the
+writer draft and records `editorStatus: "failed"` plus `editorError` in the
+article JSON.
 
 ## Agent Workflow
 
