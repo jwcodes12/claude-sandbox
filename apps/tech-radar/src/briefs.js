@@ -39,11 +39,21 @@ export async function attachBriefs(topics, config, cache = new Map()) {
     // Reuse a cached model brief when the cluster (and thus topic.id) is unchanged.
     const cached = cache.get(topic.id);
     if (cached && cached.mode === 'model' && cached.pipelineKey === pipelineKey) {
-      output.push({ ...topic, article: { ...cached, updatedAt: cached.updatedAt } });
+      const digest = fallbackArticle(topic);
+      output.push({
+        ...topic,
+        article: {
+          ...digest,
+          ...cached,
+          lane: cached.lane ?? digest.lane,
+          sources: digest.sources,
+          updatedAt: cached.updatedAt,
+        },
+      });
       continue;
     }
 
-    // Stay within the per-run generation budget; overflow falls back deterministically.
+    // Stay within the per-run generation budget; overflow uses the source digest.
     if (generated >= maxBriefs) {
       output.push({ ...topic, article: fallbackArticle(topic) });
       continue;
