@@ -60,6 +60,7 @@ export function loadConfig() {
         clusterSimilarity: 0.22,
         minHotnessForBrief: 24,
         minItemsForBrief: 2,
+        maxModelBriefs: 12,
         ...(settings.ranking ?? {}),
       },
       models: {
@@ -67,6 +68,8 @@ export function loadConfig() {
         provider: 'anthropic',
         smallModel: 'claude-3-5-haiku-latest',
         largeModel: 'claude-opus-4-1',
+        cliModel: '',
+        cliTimeoutMs: 180000,
         ...(settings.models ?? {}),
       },
       newsboat: {

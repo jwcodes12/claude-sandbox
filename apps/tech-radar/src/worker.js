@@ -2,7 +2,7 @@ import { attachBriefs } from './briefs.js';
 import { buildSite } from './build-site.js';
 import { buildTopics } from './cluster.js';
 import { loadConfig } from './config.js';
-import { ensureSources, getRecentItems, openDatabase, saveTopics } from './db.js';
+import { ensureSources, getRecentItems, openDatabase, readTopics, saveTopics } from './db.js';
 import { ingestFeeds } from './feed.js';
 import { markCompleted, shouldRun } from './schedule.js';
 
@@ -37,7 +37,8 @@ async function main() {
 
     const items = getRecentItems(db, config.settings.lookbackHours);
     const topics = buildTopics(items, config);
-    const topicsWithBriefs = await attachBriefs(topics, config);
+    const previousBriefs = new Map(readTopics(db).map((topic) => [topic.id, topic.article]));
+    const topicsWithBriefs = await attachBriefs(topics, config, previousBriefs);
     saveTopics(db, topicsWithBriefs);
     buildSite(db, config);
     markCompleted(db);
