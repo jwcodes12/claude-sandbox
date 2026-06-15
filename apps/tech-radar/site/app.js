@@ -113,6 +113,10 @@ async function renderArticle() {
   const topic = await fetch(`/data/articles/${state.selectedSlug}.json`, { cache: 'no-cache' })
     .then((response) => response.json());
 
+  const bodyHtml = topic.body
+    ? `<div class="body">${renderMarkdown(topic.body)}</div>`
+    : renderLegacyBody(topic);
+
   article.innerHTML = `
     <h2>${escapeHtml(topic.title)}</h2>
     <div class="topic-meta">
@@ -122,9 +126,9 @@ async function renderArticle() {
       <span>${formatTime(topic.updatedAt)}</span>
     </div>
 
-    ${topic.mode === 'model' ? renderModelBrief(topic) : renderDigest(topic)}
+    ${bodyHtml}
 
-    <section class="article-section">
+    <section class="article-section sources-section">
       <h3>Sources</h3>
       <div class="sources">
         ${(topic.sources ?? []).map(renderSource).join('')}
@@ -133,56 +137,63 @@ async function renderArticle() {
   `;
 }
 
-function renderModelBrief(topic) {
-  return `
-    ${section('Why it matters', topic.whyHot)}
-    ${section('Short take', topic.shortTake)}
-    ${section('Balanced read', topic.balancedTake)}
-    ${section('Strongest case', topic.strongestCase)}
-    ${section('Strongest countercase', topic.strongestCountercase)}
-    ${questionSection('Research questions', topic.researchQuestions)}
-  `;
-}
-
-function renderDigest(topic) {
-  return `
-    ${section('Why it surfaced', topic.whyHot)}
-    ${section('Lead item', topic.shortTake)}
-    ${section('Current read', topic.balancedTake)}
-    ${questionSection('What to verify', topic.researchQuestions)}
-  `;
-}
-
-function section(title, text) {
-  if (!text) return '';
-  return `
-    <section class="article-section">
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(text ?? '')}</p>
-    </section>
-  `;
-}
-
-function questionSection(title, questions = []) {
-  if (!questions.length) return '';
-  return `
-    <section class="article-section">
-      <h3>${escapeHtml(title)}</h3>
-      <ul class="questions">
-        ${questions.map((question) => `<li>${escapeHtml(question)}</li>`).join('')}
-      </ul>
-    </section>
-  `;
+// Back-compat for any cached article saved before the roundup `body` field existed.
+function renderLegacyBody(topic) {
+  const parts = [topic.whyHot, topic.shortTake, topic.balancedTake].filter(Boolean);
+  if (!parts.length) return '';
+  return `<div class="body">${parts.map((text) => `<p>${escapeHtml(text)}</p>`).join('')}</div>`;
 }
 
 function renderSource(source) {
+  const text = source.text ?? source.excerpt ?? '';
   return `
     <div class="source">
       <a href="${escapeAttribute(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title)}</a>
       <div class="source-meta">${escapeHtml(source.source)}${source.author ? ` / ${escapeHtml(source.author)}` : ''}${source.publishedAt ? ` / ${formatTime(source.publishedAt)}` : ''}</div>
-      <p>${escapeHtml(source.excerpt ?? '')}</p>
+      <p class="source-text">${escapeHtml(text).replaceAll('\n', '<br>')}</p>
     </div>
   `;
+}
+
+// --- Minimal, safe markdown renderer (escape first, then a small subset). ---
+
+function renderMarkdown(md) {
+  return String(md)
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map(renderBlock)
+    .filter(Boolean)
+    .join('\n');
+}
+
+function renderBlock(block) {
+  const trimmed = block.trim();
+  if (!trimmed) return '';
+  const lines = block.split('\n');
+  if (lines.every((line) => /^\s*>/.test(line))) {
+    const inner = lines.map((line) => line.replace(/^\s*>\s?/, '')).join('\n');
+    return `<blockquote>${renderInlineMultiline(inner)}</blockquote>`;
+  }
+  if (lines.length === 1 && /^#{1,4}\s+/.test(trimmed)) {
+    return `<h3>${renderInline(trimmed.replace(/^#{1,4}\s+/, ''))}</h3>`;
+  }
+  if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
+    return `<ul>${lines.map((line) => `<li>${renderInline(line.replace(/^\s*[-*]\s+/, ''))}</li>`).join('')}</ul>`;
+  }
+  return `<p>${renderInlineMultiline(block)}</p>`;
+}
+
+function renderInlineMultiline(text) {
+  return text.split('\n').map(renderInline).join('<br>');
+}
+
+function renderInline(text) {
+  let out = escapeHtml(text);
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (match, label, url) =>
+    `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`);
+  out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  return out;
 }
 
 function replaceUrl() {

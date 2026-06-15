@@ -181,6 +181,57 @@ h1 {
   line-height: 1.6;
 }
 
+.body {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+  color: #24211d;
+  font-size: 16px;
+  line-height: 1.68;
+}
+
+.body h3 {
+  margin: 8px 0 -4px;
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.body p,
+.body ul,
+.body blockquote {
+  margin: 0;
+}
+
+.body ul {
+  padding-left: 20px;
+}
+
+.body li + li {
+  margin-top: 6px;
+}
+
+.body a,
+.source-text a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.body blockquote {
+  border-left: 3px solid var(--accent-2);
+  background: #fbfaf7;
+  padding: 13px 16px;
+  color: #332f2a;
+  overflow-wrap: anywhere;
+}
+
+.body blockquote strong {
+  color: var(--ink);
+}
+
 .sources {
   display: grid;
   gap: 10px;
@@ -201,6 +252,13 @@ h1 {
   color: var(--muted);
   font-size: 12px;
   margin: 4px 0 6px;
+}
+
+.source-text {
+  color: #332f2a;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .questions {
