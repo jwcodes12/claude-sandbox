@@ -31,6 +31,8 @@ settings:
     codexModel: ${TECH_RADAR_CODEX_MODEL:-gpt-5.5}
     claudeModel: ${TECH_RADAR_CLAUDE_MODEL:-claude-opus-4-8}
     claudeFallbackModel: ${TECH_RADAR_CLAUDE_FALLBACK_MODEL:-claude-sonnet-4-6}
+    agyWriterModel: ${TECH_RADAR_AGY_WRITER_MODEL:-Gemini 3.5 Flash (Medium)}
+    agyEditorModel: ${TECH_RADAR_AGY_EDITOR_MODEL:-Gemini 3.5 Flash (High)}
     cliModel: ${TECH_RADAR_CLI_MODEL:-}
   newsboat:
     # Read tweets straight from the local newsboat sqlite cache.

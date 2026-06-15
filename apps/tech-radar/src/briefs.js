@@ -81,13 +81,22 @@ async function generateBrief(topic, config, promptTemplate, editTemplate) {
 
   const writerProvider = modelProvider(config, 'writer');
   const editorProvider = modelProvider(config, 'editor');
-  const writerDraft = await generateWithProvider(writerProvider, input, config);
+
+  let writerDraft;
+  let actualWriterProvider = writerProvider;
+  try {
+    writerDraft = await generateWithProvider(writerProvider, input, config, 'writer');
+  } catch (error) {
+    console.warn(`[brief] Writer ${writerProvider} failed: ${error.message}. Trying backup 'agy'...`);
+    actualWriterProvider = 'agy';
+    writerDraft = await generateWithProvider('agy', input, config, 'writer');
+  }
 
   if (!shouldEdit(config, editorProvider)) {
     return {
       ...writerDraft,
       writerDraft,
-      writerProvider,
+      writerProvider: actualWriterProvider,
       editorProvider: null,
       editorStatus: 'skipped',
     };
@@ -110,25 +119,34 @@ async function generateBrief(topic, config, promptTemplate, editTemplate) {
     })),
   }, null, 2));
 
+  let edited;
+  let actualEditorProvider = editorProvider;
   try {
-    const edited = await generateWithProvider(editorProvider, editInput, config);
-    return {
-      ...edited,
-      writerDraft,
-      writerProvider,
-      editorProvider,
-      editorStatus: 'edited',
-    };
+    edited = await generateWithProvider(editorProvider, editInput, config, 'editor');
   } catch (error) {
-    return {
-      ...writerDraft,
-      writerDraft,
-      writerProvider,
-      editorProvider,
-      editorStatus: 'failed',
-      editorError: error.message,
-    };
+    console.warn(`[brief] Editor ${editorProvider} failed: ${error.message}. Trying backup 'agy'...`);
+    try {
+      actualEditorProvider = 'agy';
+      edited = await generateWithProvider('agy', editInput, config, 'editor');
+    } catch (backupError) {
+      return {
+        ...writerDraft,
+        writerDraft,
+        writerProvider: actualWriterProvider,
+        editorProvider: actualEditorProvider,
+        editorStatus: 'failed',
+        editorError: `${error.message}; backup failed: ${backupError.message}`,
+      };
+    }
   }
+
+  return {
+    ...edited,
+    writerDraft,
+    writerProvider: actualWriterProvider,
+    editorProvider: actualEditorProvider,
+    editorStatus: 'edited',
+  };
 }
 
 function topicSourcePayload(topic) {
@@ -173,10 +191,12 @@ function briefPipelineKey(config) {
     `claudeFallbackModel=${models.claudeFallbackModel || ''}`,
     `small=${models.smallModel || ''}`,
     `large=${models.largeModel || ''}`,
+    `agyWriterModel=${models.agyWriterModel || ''}`,
+    `agyEditorModel=${models.agyEditorModel || ''}`,
   ].join('|');
 }
 
-async function generateWithProvider(provider, input, config) {
+async function generateWithProvider(provider, input, config, stage) {
   switch (provider) {
     case 'openai':
       return generateOpenAI(input, config);
@@ -186,12 +206,41 @@ async function generateWithProvider(provider, input, config) {
     case 'codex':
     case 'codex-cli':
       return generateCodexCli(input, config);
+    case 'agy':
+    case 'agy-cli':
+      return generateAgyCli(input, config, stage);
     case 'anthropic':
     case '':
       return generateAnthropic(input, config);
     default:
       throw new Error(`unknown model provider: ${provider}`);
   }
+}
+
+async function generateAgyCli(input, config, stage) {
+  const args = ['-p', '--dangerously-skip-permissions'];
+  const models = config.settings.models;
+  let model = '';
+  
+  if (stage === 'editor') {
+    model = models.agyEditorModel || 'Gemini 3.5 Flash (High)';
+  } else {
+    model = models.agyWriterModel || 'Gemini 3.5 Flash (Medium)';
+  }
+  
+  if (model) {
+    const modelLower = String(model).toLowerCase();
+    if (modelLower === 'medium' || modelLower === 'flash-medium' || modelLower === 'gemini-3.5-flash-medium') {
+      model = 'Gemini 3.5 Flash (Medium)';
+    } else if (modelLower === 'high' || modelLower === 'flash-high' || modelLower === 'gemini-3.5-flash-high') {
+      model = 'Gemini 3.5 Flash (High)';
+    } else if (modelLower === 'low' || modelLower === 'flash-low' || modelLower === 'gemini-3.5-flash-low') {
+      model = 'Gemini 3.5 Flash (Low)';
+    }
+    args.push('--model', String(model));
+  }
+  const text = await runCli('agy', args, input, cliTimeout(config));
+  return parseJson(text);
 }
 
 // --- CLI providers: use the locally logged-in claude / codex CLIs (subscription
