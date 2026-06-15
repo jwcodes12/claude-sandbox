@@ -32,9 +32,21 @@ The default source mix is:
 - Simon Willison, Latent Space, Interconnects, LessWrong curated, Zvi
 - Techmeme
 
+## Topic Lanes
+
+The site splits clustered topics into lanes:
+
+- `Takes`: Twitter-heavy clusters where the useful object is the take/reaction.
+- `Newswire`: Hacker News, Lobsters, Techmeme, company/blog, and general source clusters.
+- `Research`: arXiv or research-heavy clusters.
+
+Digest topics use source excerpts and verification prompts. Model briefs add the
+fuller balanced-take structure when a topic is important enough to spend a model
+call.
+
 ## Model Use
 
-The worker always produces deterministic fallback briefs. Model briefs are opt-in:
+The worker always produces source digest fallbacks. Model briefs are opt-in:
 
 ```bash
 export TECH_RADAR_ENABLE_LLM=1

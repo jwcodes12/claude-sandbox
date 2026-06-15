@@ -22,9 +22,12 @@ export function buildSite(db, config) {
     title: topic.title,
     hotness: topic.hotness,
     updatedAt: topic.updatedAt,
+    lane: topic.article.lane ?? 'news',
+    mode: topic.article.mode ?? 'digest',
     whyHot: topic.article.whyHot,
     shortTake: topic.article.shortTake,
     sourceCount: topic.article.sources?.length ?? 0,
+    sourceKinds: [...new Set((topic.article.sources ?? []).map((source) => source.sourceKind))].slice(0, 5),
     sources: [...new Set((topic.article.sources ?? []).map((source) => source.source))].slice(0, 5),
   }));
 
