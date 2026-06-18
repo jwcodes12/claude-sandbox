@@ -117,6 +117,9 @@ export async function attachBriefs(topics, config, cache = new Map(), db = null)
       output.push({ ...topic, article: { ...fallbackArticle(topic), modelError: error.message } });
     }
   }
+  const runStats = output.flatMap((t) => t.article?.briefStats ?? []);
+  printStatsSummary(runStats, config);
+  appendStatsLog(runStats, config);
   return output;
 }
 
@@ -135,12 +138,13 @@ async function generateBrief(topic, config, promptTemplate, editTemplate, db) {
 
   let writerDraft;
   let actualWriterProvider = writerProvider;
+  let writerStat;
   try {
-    writerDraft = await generateWithProvider(writerProvider, input, config, 'writer');
+    ({ result: writerDraft, stat: writerStat } = await timedProvider(writerProvider, input, config, 'writer'));
   } catch (error) {
     console.warn(`[brief] Writer ${writerProvider} failed: ${error.message}. Trying backup 'gemini'...`);
     actualWriterProvider = 'gemini';
-    writerDraft = await generateWithProvider('gemini', input, config, 'writer');
+    ({ result: writerDraft, stat: writerStat } = await timedProvider('gemini', input, config, 'writer'));
   }
   writerDraft = normalizeModelArticle(writerDraft);
 
@@ -151,6 +155,7 @@ async function generateBrief(topic, config, promptTemplate, editTemplate, db) {
       writerProvider: actualWriterProvider,
       editorProvider: null,
       editorStatus: 'writer-rejected',
+      briefStats: [writerStat],
     };
   }
 
@@ -161,6 +166,7 @@ async function generateBrief(topic, config, promptTemplate, editTemplate, db) {
       writerProvider: actualWriterProvider,
       editorProvider: null,
       editorStatus: 'skipped',
+      briefStats: [writerStat],
     };
   }
 
@@ -193,13 +199,14 @@ async function generateBrief(topic, config, promptTemplate, editTemplate, db) {
 
   let edited;
   let actualEditorProvider = editorProvider;
+  let editorStat;
   try {
-    edited = await generateWithProvider(editorProvider, editInput, config, 'editor');
+    ({ result: edited, stat: editorStat } = await timedProvider(editorProvider, editInput, config, 'editor'));
   } catch (error) {
     console.warn(`[brief] Editor ${editorProvider} failed: ${error.message}. Trying backup 'agy'...`);
     try {
       actualEditorProvider = 'agy';
-      edited = await generateWithProvider('agy', editInput, config, 'editor');
+      ({ result: edited, stat: editorStat } = await timedProvider('agy', editInput, config, 'editor'));
     } catch (backupError) {
       return {
         ...writerDraft,
@@ -208,6 +215,7 @@ async function generateBrief(topic, config, promptTemplate, editTemplate, db) {
         editorProvider: actualEditorProvider,
         editorStatus: 'failed',
         editorError: `${error.message}; backup failed: ${backupError.message}`,
+        briefStats: [writerStat],
       };
     }
   }
@@ -223,6 +231,7 @@ async function generateBrief(topic, config, promptTemplate, editTemplate, db) {
     writerProvider: actualWriterProvider,
     editorProvider: actualEditorProvider,
     editorStatus: 'edited',
+    briefStats: [writerStat, editorStat].filter(Boolean),
   };
 }
 
@@ -322,7 +331,7 @@ function briefPipelineKey(config) {
   const writerProvider = modelProvider(config, 'writer');
   const editorProvider = shouldEdit(config, modelProvider(config, 'editor')) ? modelProvider(config, 'editor') : 'none';
   return [
-    'v7', // bumped: writer/editor must return coherence and title-quality verdicts
+    'v8', // bumped: gemini provider + stats tracking
     `writer=${writerProvider}`,
     `editor=${editorProvider}`,
     `cliModel=${models.cliModel || ''}`,
@@ -405,13 +414,24 @@ function cliModel(config, provider) {
 }
 
 async function generateClaudeCli(input, config) {
-  const args = ['-p', '--output-format', 'text'];
+  const args = ['-p', '--output-format', 'json', '--effort', 'medium'];
   const model = cliModel(config, 'claude');
   if (model) args.push('--model', String(model));
   const fallbackModel = config.settings.models.claudeFallbackModel;
   if (fallbackModel) args.push('--fallback-model', String(fallbackModel));
-  const text = await runCli('claude', args, input, cliTimeout(config));
-  return parseJson(text);
+  const raw = await runCli('claude', args, input, cliTimeout(config));
+  const envelope = JSON.parse(raw);
+  const resultText = typeof envelope.result === 'string' ? envelope.result : raw;
+  const usage = envelope.usage ?? {};
+  const parsed = parseJson(resultText);
+  parsed._usage = {
+    model: model || 'claude',
+    inputTokens: (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+    outputTokens: usage.output_tokens ?? 0,
+    cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+    isSubscription: true,
+  };
+  return parsed;
 }
 
 async function generateCodexCli(input, config) {
@@ -521,7 +541,96 @@ async function generateGemini(input, config, stage) {
   if (!response.ok) throw new Error(`Gemini HTTP ${response.status}: ${await response.text()}`);
   const json = await response.json();
   const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-  return parseJson(text);
+  const parsed = parseJson(text);
+  parsed._usage = {
+    model,
+    inputTokens: json.usageMetadata?.promptTokenCount ?? 0,
+    outputTokens: json.usageMetadata?.candidatesTokenCount ?? 0,
+  };
+  return parsed;
+}
+
+async function timedProvider(provider, input, config, stage) {
+  const start = Date.now();
+  const result = await generateWithProvider(provider, input, config, stage);
+  const ms = Date.now() - start;
+  const usage = result._usage ?? {};
+  delete result._usage;
+  const isSubscription = usage.isSubscription ?? (provider === 'agy' || provider === 'agy-cli');
+  const costUsd = isSubscription ? 0 : estimateCostUsd(provider, usage.model, usage.inputTokens ?? 0, usage.outputTokens ?? 0);
+  return {
+    result,
+    stat: {
+      ts: new Date().toISOString(),
+      stage,
+      provider,
+      model: usage.model ?? resolveModelLabel(provider, stage, config),
+      inputTokens: usage.inputTokens ?? null,
+      outputTokens: usage.outputTokens ?? null,
+      cacheCreationTokens: usage.cacheCreationTokens ?? null,
+      costUsd,
+      isSubscription,
+      latencyMs: ms,
+      success: true,
+    },
+  };
+}
+
+function resolveModelLabel(provider, stage, config) {
+  const models = config.settings.models;
+  if (provider === 'gemini') return stage === 'editor' ? (models.geminiEditorModel || 'gemini-2.5-pro') : (models.geminiWriterModel || 'gemini-3.1-flash-lite');
+  if (provider === 'claude' || provider === 'claude-cli') return models.claudeModel || 'claude';
+  if (provider === 'agy') return stage === 'editor' ? (models.agyEditorModel || 'agy-editor') : (models.agyWriterModel || 'agy-writer');
+  if (provider === 'codex' || provider === 'codex-cli') return models.codexModel || 'codex';
+  return provider;
+}
+
+function estimateCostUsd(provider, model, inputTokens, outputTokens) {
+  if (provider !== 'gemini') return 0; // subscription = $0 marginal cost
+  const rates = {
+    'gemini-3.1-flash-lite': { input: 0.10, output: 0.40 },
+    'gemini-3.1-flash-lite-preview': { input: 0.10, output: 0.40 },
+    'gemini-2.5-flash': { input: 0.15, output: 0.60 },
+    'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
+    'gemini-2.5-pro': { input: 1.25, output: 10.00 },
+    'gemini-3.1-pro-preview': { input: 1.25, output: 10.00 },
+  };
+  const r = rates[model] ?? { input: 0.10, output: 0.40 };
+  return (inputTokens * r.input + outputTokens * r.output) / 1_000_000;
+}
+
+function printStatsSummary(stats, _config) {
+  if (!stats.length) return;
+  const byProvider = {};
+  for (const s of stats) {
+    const key = `${s.provider}/${s.model}`;
+    if (!byProvider[key]) byProvider[key] = { calls: 0, totalMs: 0, totalIn: 0, totalOut: 0, totalCost: 0, isSub: s.isSubscription };
+    const b = byProvider[key];
+    b.calls += 1;
+    b.totalMs += s.latencyMs;
+    b.totalIn += s.inputTokens ?? 0;
+    b.totalOut += s.outputTokens ?? 0;
+    b.totalCost += s.costUsd;
+  }
+  console.log('[briefs] model stats:');
+  for (const [key, b] of Object.entries(byProvider)) {
+    const avgMs = Math.round(b.totalMs / b.calls);
+    const tokStr = b.totalIn ? ` | ${b.totalIn.toLocaleString()}in / ${b.totalOut.toLocaleString()}out tok` : ' | tokens: n/a';
+    const costStr = b.isSub
+      ? ` | subscription (weekly usage: ${(b.totalIn + b.totalOut).toLocaleString()} tok)`
+      : (b.totalCost > 0 ? ` | $${b.totalCost.toFixed(5)}` : ' | $0 (free tier)');
+    console.log(`  ${key}: ${b.calls} calls, avg ${avgMs}ms${tokStr}${costStr}`);
+  }
+}
+
+function appendStatsLog(stats, config) {
+  if (!stats.length) return;
+  try {
+    const dataDir = config.settings.dataDir;
+    const logPath = `${dataDir}/model-stats.jsonl`;
+    const lines = stats.map((s) => JSON.stringify(s) + String.fromCharCode(10)).join('');
+    import('node:fs').then(({ appendFileSync }) => appendFileSync(logPath, lines));
+  } catch { /* non-fatal */ }
 }
 
 function parseJson(text) {
