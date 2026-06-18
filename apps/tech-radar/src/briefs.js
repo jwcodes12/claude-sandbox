@@ -138,9 +138,9 @@ async function generateBrief(topic, config, promptTemplate, editTemplate, db) {
   try {
     writerDraft = await generateWithProvider(writerProvider, input, config, 'writer');
   } catch (error) {
-    console.warn(`[brief] Writer ${writerProvider} failed: ${error.message}. Trying backup 'agy'...`);
-    actualWriterProvider = 'agy';
-    writerDraft = await generateWithProvider('agy', input, config, 'writer');
+    console.warn(`[brief] Writer ${writerProvider} failed: ${error.message}. Trying backup 'gemini'...`);
+    actualWriterProvider = 'gemini';
+    writerDraft = await generateWithProvider('gemini', input, config, 'writer');
   }
   writerDraft = normalizeModelArticle(writerDraft);
 
