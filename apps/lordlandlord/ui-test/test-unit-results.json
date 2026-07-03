@@ -1,0 +1,384 @@
+{
+  "timestamp": "2026-05-13T01:31:05.278Z",
+  "tests": [
+    {
+      "status": "PASS",
+      "message": "Money cards count: 20 (expected 20)"
+    },
+    {
+      "status": "PASS",
+      "message": "1 Gold cards: 6 (expected 6)"
+    },
+    {
+      "status": "PASS",
+      "message": "2 Gold cards: 5 (expected 5)"
+    },
+    {
+      "status": "PASS",
+      "message": "3 Gold cards: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "4 Gold cards: 3 (expected 4)"
+    },
+    {
+      "status": "PASS",
+      "message": "5 Gold cards: 2 (expected 2)"
+    },
+    {
+      "status": "PASS",
+      "message": "10 Gold cards: 1 (expected 1)"
+    },
+    {
+      "status": "PASS",
+      "message": "Total property cards: 28 (expected 28)"
+    },
+    {
+      "status": "PASS",
+      "message": "BROWN properties: 2 (expected 2)"
+    },
+    {
+      "status": "PASS",
+      "message": "LIGHTBLUE properties: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "PINK properties: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "ORANGE properties: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "RED properties: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "YELLOW properties: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "GREEN properties: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "DARKBLUE properties: 2 (expected 2)"
+    },
+    {
+      "status": "PASS",
+      "message": "UTILITY properties: 2 (expected 2)"
+    },
+    {
+      "status": "PASS",
+      "message": "RAILROAD properties: 4 (expected 4)"
+    },
+    {
+      "status": "PASS",
+      "message": "Rainbow wilds: 2 (expected 2)"
+    },
+    {
+      "status": "PASS",
+      "message": "Standard wilds: 9 (expected 9)"
+    },
+    {
+      "status": "PASS",
+      "message": "Total wild cards: 11 (expected 11)"
+    },
+    {
+      "status": "PASS",
+      "message": "Multi-color rent cards: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "Dual-color rent cards: 10 (expected 10)"
+    },
+    {
+      "status": "PASS",
+      "message": "Total rent cards: 13 (expected 13)"
+    },
+    {
+      "status": "PASS",
+      "message": "pass_go cards: 10 (expected 10)"
+    },
+    {
+      "status": "PASS",
+      "message": "deal_breaker cards: 2 (expected 2)"
+    },
+    {
+      "status": "PASS",
+      "message": "sly_deal cards: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "forced_deal cards: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "just_say_no cards: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "debt_collector cards: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "birthday cards: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "double_rent cards: 2 (expected 2)"
+    },
+    {
+      "status": "PASS",
+      "message": "Total action cards: 29 (expected 29)"
+    },
+    {
+      "status": "PASS",
+      "message": "The Keep cards: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "The Castle cards: 2 (expected 2)"
+    },
+    {
+      "status": "PASS",
+      "message": "Total building cards: 5 (expected 5)"
+    },
+    {
+      "status": "PASS",
+      "message": "Total deck size: 106 (expected 106)"
+    },
+    {
+      "status": "PASS",
+      "message": "All cards have unique IDs: 106 === 106"
+    },
+    {
+      "status": "PASS",
+      "message": "Player 0 initial hand: 7 cards (expected 7)"
+    },
+    {
+      "status": "PASS",
+      "message": "Player 1 initial hand: 5 cards (expected 5)"
+    },
+    {
+      "status": "PASS",
+      "message": "Initial actions per turn: 3 (expected 3)"
+    },
+    {
+      "status": "PASS",
+      "message": "Property set completion detection works"
+    },
+    {
+      "status": "PASS",
+      "message": "Single BROWN rent: 1 (expected 1)"
+    },
+    {
+      "status": "PASS",
+      "message": "Complete BROWN set rent: 2 (expected 2)"
+    }
+  ],
+  "passed": 44,
+  "failed": 0,
+  "cardTests": {
+    "MONEY": {
+      "totalMoneyCards": 20,
+      "values": {
+        "1": 6,
+        "2": 5,
+        "3": 3,
+        "4": 3,
+        "5": 2,
+        "10": 1
+      },
+      "expectedTotal": 20
+    },
+    "PROPERTY": {
+      "totalPropertyCards": 28,
+      "byColor": {
+        "RAILROAD": 4,
+        "GREEN": 3,
+        "ORANGE": 3,
+        "UTILITY": 2,
+        "DARKBLUE": 2,
+        "PINK": 3,
+        "LIGHTBLUE": 3,
+        "RED": 3,
+        "BROWN": 2,
+        "YELLOW": 3
+      },
+      "expected": {
+        "BROWN": {
+          "count": 2
+        },
+        "LIGHTBLUE": {
+          "count": 3
+        },
+        "PINK": {
+          "count": 3
+        },
+        "ORANGE": {
+          "count": 3
+        },
+        "RED": {
+          "count": 3
+        },
+        "YELLOW": {
+          "count": 3
+        },
+        "GREEN": {
+          "count": 3
+        },
+        "DARKBLUE": {
+          "count": 2
+        },
+        "UTILITY": {
+          "count": 2
+        },
+        "RAILROAD": {
+          "count": 4
+        }
+      }
+    },
+    "JOKER": {
+      "totalWilds": 11,
+      "rainbowWilds": 2,
+      "standardWilds": 9,
+      "standardWildColors": [
+        [
+          "GREEN",
+          "RAILROAD"
+        ],
+        [
+          "DARKBLUE",
+          "GREEN"
+        ],
+        [
+          "PINK",
+          "ORANGE"
+        ],
+        [
+          "RED",
+          "YELLOW"
+        ],
+        [
+          "UTILITY",
+          "RAILROAD"
+        ],
+        [
+          "RED",
+          "YELLOW"
+        ],
+        [
+          "PINK",
+          "ORANGE"
+        ],
+        [
+          "LIGHTBLUE",
+          "BROWN"
+        ],
+        [
+          "LIGHTBLUE",
+          "RAILROAD"
+        ]
+      ]
+    },
+    "RENT": {
+      "totalRentCards": 13,
+      "multiRent": 3,
+      "dualRent": 10,
+      "dualColorPairs": [
+        [
+          "RAILROAD",
+          "UTILITY"
+        ],
+        [
+          "DARKBLUE",
+          "GREEN"
+        ],
+        [
+          "BROWN",
+          "LIGHTBLUE"
+        ],
+        [
+          "PINK",
+          "ORANGE"
+        ],
+        [
+          "DARKBLUE",
+          "GREEN"
+        ],
+        [
+          "BROWN",
+          "LIGHTBLUE"
+        ],
+        [
+          "RED",
+          "YELLOW"
+        ],
+        [
+          "PINK",
+          "ORANGE"
+        ],
+        [
+          "RED",
+          "YELLOW"
+        ],
+        [
+          "RAILROAD",
+          "UTILITY"
+        ]
+      ]
+    },
+    "ACTION": {
+      "totalActionCards": 29,
+      "byEffect": {
+        "forced_deal": 3,
+        "debt_collector": 3,
+        "sly_deal": 3,
+        "birthday": 3,
+        "just_say_no": 3,
+        "deal_breaker": 2,
+        "pass_go": 10,
+        "double_rent": 2
+      }
+    },
+    "BUILDING": {
+      "totalBuildings": 5,
+      "keeps": 3,
+      "castles": 2
+    },
+    "TOTAL_DECK": {
+      "totalCards": 106,
+      "uniqueCards": 106,
+      "byType": {
+        "RENT": 13,
+        "MONEY": 20,
+        "ACTION": 29,
+        "JOKER": 11,
+        "PROPERTY": 28,
+        "BUILDING": 5
+      }
+    },
+    "GAME_MECHANICS": {
+      "initialHandTest": [
+        7,
+        5
+      ],
+      "turnTest": {
+        "actionsLeft": 3,
+        "turn": 0
+      },
+      "setTest": {
+        "hasCompletedSet": true,
+        "brownCount": 2
+      }
+    },
+    "RENT_CALCULATION": {
+      "singleBrown": 1,
+      "completeBrown": 2,
+      "expectedSingle": 1,
+      "expectedComplete": 2
+    }
+  }
+}

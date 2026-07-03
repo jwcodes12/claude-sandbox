@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lord Landlord - King of the Land</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- PeerJS for multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!--
+      WebRTC ICE servers override. The bundled defaults include free public
+      STUN + a best-effort shared TURN that may not authenticate reliably.
+      For dependable cross-network play, paste working TURN credentials below
+      (Cloudflare Calls TURN: 1 TB/mo free; Metered.ca: 50 GB/mo free).
+    -->
+    <script>
+      window.LL_RTC_CONFIG = {
+        iceServers: [
+          { urls: 'stun:stun.relay.metered.ca:80' },
+          {
+            urls: 'turn:standard.relay.metered.ca:80',
+            username: 'ff86d2ad7758d91b805ec974',
+            credential: 'MP1/RjinkQ1NGhEw'
+          },
+          {
+            urls: 'turn:standard.relay.metered.ca:80?transport=tcp',
+            username: 'ff86d2ad7758d91b805ec974',
+            credential: 'MP1/RjinkQ1NGhEw'
+          },
+          {
+            urls: 'turn:standard.relay.metered.ca:443',
+            username: 'ff86d2ad7758d91b805ec974',
+            credential: 'MP1/RjinkQ1NGhEw'
+          },
+          {
+            urls: 'turns:standard.relay.metered.ca:443?transport=tcp',
+            username: 'ff86d2ad7758d91b805ec974',
+            credential: 'MP1/RjinkQ1NGhEw'
+          }
+        ]
+      };
+    </script>
+</head>
+<body>
+
+    <!-- Splash Screen -->
+    <div id="splash-container" class="menu-overlay">
+        <div class="menu-content title-screen">
+            <h1 class="grand-title">LORD LANDLORD</h1>
+            <h2 class="sub-title">King of the Land</h2>
+            <div class="splash-panels">
+                <div class="splash-panel create-panel">
+                    <h3>🏰 CREATE REALM</h3>
+                    <input type="text" id="player-name-create" placeholder="Your Lord Name..." class="menu-input">
+                    <input type="text" id="room-pass-create" placeholder="Secret Pass (optional)" class="menu-input">
+                    <button id="btn-create-game" class="badge btn" style="background: #2d5a27; font-size: 18px; padding: 12px 24px;">Forge Realm</button>
+                </div>
+                <div class="splash-panel join-panel">
+                    <h3>🤝 JOIN REALM</h3>
+                    <input type="text" id="player-name-join" placeholder="Your Lord Name..." class="menu-input">
+                    <input type="text" id="join-game-id" placeholder="e.g. green-duck-pond" class="menu-input" autocapitalize="none" autocorrect="off" spellcheck="false">
+                    <input type="text" id="room-pass-join" placeholder="Secret Pass (if any)" class="menu-input">
+                    <button id="btn-join-game" class="badge btn" style="background: #2a4a7f; font-size: 18px; padding: 12px 24px;">March Forth</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lobby Screen -->
+    <div id="lobby-container" class="menu-overlay hidden">
+        <div class="menu-content lobby-screen">
+            <h2>REALM FORGED!</h2>
+            <div class="lobby-id-box">
+                <span style="font-size: 14px; color: #666;">Realm ID:</span>
+                <h1 id="lobby-id-display">LOCAL-TEST</h1>
+                <div id="lobby-pass-display" style="font-size: 13px; color: #d4af37; margin: 4px 0 8px;"></div>
+                <button id="btn-copy-id" class="badge btn" style="background: #1a1a1a; width: 100%;">Copy ID</button>
+                <button id="btn-add-bot" class="badge btn" style="background: #4a6741; width: 100%; margin-top: 8px;">🤖 Add AI Rival</button>
+            </div>
+            
+            <div class="lobby-slots" id="lobby-slots">
+                <!-- Slots will be injected here -->
+            </div>
+
+            <button id="btn-start-game" class="badge btn" style="background: #d4af37; color: #000; width: 100%; margin-top: 16px; font-size: 18px;" disabled>START REIGN</button>
+            <button id="btn-leave-lobby" class="badge btn" style="background: #8b2020; width: 100%; margin-top: 8px;">Abandon Realm</button>
+        </div>
+    </div>
+
+    <!-- Game UI -->
+    <div id="game-container" class="hidden">
+        <div id="turn-banner">CLAIM YOUR LAND</div>
+        <main id="game-root"></main>
+    </div>
+
+    <!-- Picker Modal -->
+    <div id="picker-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2 id="picker-title" class="modal-title">Royal Choice</h2>
+            <div id="picker-grid" class="grid-picker"></div>
+            <button id="btn-close-modal" class="badge btn" style="background: #888; margin-top: 16px; align-self: center;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Modules (cache-busted during dev so module-registry doesn't pin a stale build) -->
+    <script type="module">
+        await import(`./js/main.js?v=${Date.now()}`);
+    </script>
+</body>
+</html>

@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stealr.io Strategy Guide | Tips to Win Every Game</title>
+    <meta
+      name="description"
+      content="Master property card game strategy with our complete guide. Expert tips, card priorities, and advanced tactics to win every game of Stealr.io."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="strategy.html" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://stealr.io/strategy" />
+    <meta property="og:title" content="Stealr.io Strategy Guide | Tips to Win Every Game" />
+    <meta
+      property="og:description"
+      content="Master property card game strategy with our complete guide. Expert tips, card priorities, and advanced tactics to win every game."
+    />
+    <meta property="og:image" content="https://stealr.io/StealrLogoQuer.jpg" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Stealr.io Strategy Guide | Tips to Win Every Game" />
+    <meta
+      name="twitter:description"
+      content="Master property card game strategy with our complete guide. Expert tips, card priorities, and advanced tactics to win every game."
+    />
+    <meta name="twitter:image" content="https://stealr.io/StealrLogoQuer.jpg" />
+
+    <!-- JSON-LD Article Schema -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Stealr.io Strategy Guide — Winning Tips & Advanced Tactics",
+        "description": "Master property card game strategy with our complete guide. Expert tips, card priorities, and advanced tactics to win every game of Stealr.io.",
+        "image": "https://stealr.io/StealrLogoQuer.jpg",
+        "author": {
+          "@type": "Organization",
+          "name": "Stealr.io"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Stealr.io",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://stealr.io/StealrLogoQuer.jpg"
+          }
+        },
+        "url": "https://stealr.io/strategy",
+        "mainEntityOfPage": "https://stealr.io/strategy",
+        "datePublished": "2026-03-18",
+        "dateModified": "2026-03-18"
+      }
+    </script>
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-K338QN7G09"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+      gtag('config', 'G-K338QN7G09');
+    </script>
+
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.7;
+        color: #1a1a1a;
+        background: #f0ede6;
+        padding: 24px;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      /* Navigation */
+      nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 40px;
+        padding-bottom: 16px;
+        border-bottom: 3px solid #1a1a1a;
+      }
+      .nav-logo {
+        font-size: 20px;
+        font-weight: 900;
+        color: #1a1a1a;
+        text-decoration: none;
+        letter-spacing: -0.02em;
+      }
+      .nav-links {
+        display: flex;
+        gap: 20px;
+        list-style: none;
+      }
+      .nav-links a {
+        color: #1a1a1a;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 700;
+        padding: 6px 12px;
+        border: 2px solid transparent;
+        transition: border-color 0.2s;
+      }
+      .nav-links a:hover {
+        border-bottom: 2px solid #1a1a1a;
+      }
+
+      /* Hero */
+      .hero {
+        text-align: center;
+        margin-bottom: 48px;
+      }
+      .hero h1 {
+        font-size: clamp(26px, 5vw, 38px);
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        margin-bottom: 16px;
+      }
+      .hero .intro {
+        font-size: 17px;
+        color: #4a4a4a;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      /* Sections */
+      .section {
+        background: #e8e4dc;
+        border: 3px solid #1a1a1a;
+        box-shadow: 4px 4px 0px #1a1a1a;
+        padding: 28px 32px;
+        margin-bottom: 32px;
+      }
+      .section h2 {
+        font-size: 22px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 3px solid #1a1a1a;
+      }
+      .section h3 {
+        font-size: 16px;
+        font-weight: 800;
+        margin: 20px 0 10px;
+        color: #1a1a1a;
+      }
+      .section p {
+        margin-bottom: 12px;
+        color: #4a4a4a;
+        font-size: 15px;
+      }
+      .section ul,
+      .section ol {
+        padding-left: 24px;
+        margin-bottom: 16px;
+      }
+      .section li {
+        margin-bottom: 8px;
+        color: #4a4a4a;
+        font-size: 15px;
+      }
+      .section li strong {
+        color: #1a1a1a;
+      }
+
+      /* Tier list */
+      .tier-list {
+        list-style: none;
+        padding-left: 0;
+      }
+      .tier-list li {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        margin-bottom: 6px;
+        background: #f0ede6;
+        border: 2px solid #1a1a1a;
+        font-size: 15px;
+      }
+      .tier-label {
+        font-weight: 900;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        min-width: 56px;
+        text-align: center;
+        padding: 2px 8px;
+        border: 2px solid #1a1a1a;
+        background: #1a1a1a;
+        color: #f0ede6;
+      }
+
+      /* Color ranking */
+      .color-ranking {
+        list-style: none;
+        padding-left: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .color-ranking li {
+        margin-bottom: 0;
+        font-size: 13px;
+        font-weight: 700;
+        padding: 4px 12px;
+        border: 2px solid #1a1a1a;
+        background: #f0ede6;
+      }
+      .color-ranking li .rank {
+        color: #888;
+        font-weight: 900;
+        margin-right: 4px;
+      }
+
+      /* Tip box */
+      .tip-box {
+        background: #f0ede6;
+        border: 2px solid #1a1a1a;
+        padding: 14px 18px;
+        margin: 16px 0;
+        font-size: 14px;
+      }
+      .tip-box strong {
+        color: #1a1a1a;
+      }
+
+      /* CTA */
+      .cta {
+        text-align: center;
+        margin: 48px 0 40px;
+      }
+      .cta p {
+        font-size: 18px;
+        font-weight: 700;
+        color: #4a4a4a;
+        margin-bottom: 20px;
+      }
+      .cta-button {
+        display: inline-block;
+        padding: 14px 40px;
+        background: #1a1a1a;
+        color: #f0ede6;
+        text-decoration: none;
+        font-size: 16px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border: 3px solid #1a1a1a;
+        box-shadow: 4px 4px 0px #1a1a1a;
+        transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .cta-button:hover {
+        transform: translate(2px, 2px);
+        box-shadow: 2px 2px 0px #1a1a1a;
+      }
+
+      /* Footer */
+      footer {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 3px solid #1a1a1a;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      footer .footer-links {
+        display: flex;
+        gap: 20px;
+        list-style: none;
+      }
+      footer .footer-links a {
+        color: #4a4a4a;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      footer .footer-links a:hover {
+        color: #1a1a1a;
+      }
+      footer .copyright {
+        font-size: 13px;
+        color: #888;
+      }
+
+      /* Responsive */
+      @media (max-width: 640px) {
+        body {
+          padding: 16px;
+        }
+        .section {
+          padding: 20px;
+        }
+        nav {
+          flex-direction: column;
+          gap: 12px;
+          align-items: flex-start;
+        }
+        footer {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Navigation -->
+      <nav>
+        <a href="index.html" class="nav-logo">Stealr.io</a>
+        <ul class="nav-links">
+          <li><a href="index.html">Play Now</a></li>
+          <li><a href="rules.html">Rules</a></li>
+          <li><a href="cards.html">Cards</a></li>
+        </ul>
+      </nav>
+
+      <!-- Hero -->
+      <div class="hero">
+        <h1>Stealr.io Strategy Guide &mdash; Winning Tips &amp; Advanced Tactics</h1>
+        <p class="intro">
+          Master these strategies to dominate in Stealr.io, the free online property trading card
+          game. Whether you are a beginner or a seasoned player, this guide covers everything from
+          basic money management to advanced mind games.
+        </p>
+      </div>
+
+      <!-- 1. Beginner Tips -->
+      <div class="section">
+        <h2>Beginner Tips</h2>
+        <p>
+          New to property card games? These fundamentals will put you ahead of most casual players
+          from day one.
+        </p>
+        <ul>
+          <li>
+            <strong>Always bank money early</strong> &mdash; cash in your bank is protected from
+            theft. Build a safety cushion of 3&ndash;5M before getting aggressive with action cards.
+          </li>
+          <li>
+            <strong>Focus on completing small sets first</strong> &mdash; Brown requires only 2
+            cards to complete, and so does Dark Blue. Smaller sets mean fewer turns to victory.
+          </li>
+          <li>
+            <strong>Save Just Say No for critical moments</strong> &mdash; do not waste your
+            defensive card on a minor rent. Hold it for Deal Breakers and Sly Deals targeting your
+            near-complete sets.
+          </li>
+          <li>
+            <strong>Never waste actions</strong> &mdash; you get 3 actions per turn. Use all of
+            them. Even if you have nothing good to play, bank a card from your hand.
+          </li>
+          <li>
+            <strong>Bank action cards you cannot use</strong> &mdash; every action card has a bank
+            value printed on it. Pass Go is worth 1M, Debt Collector is worth 3M, and Birthday is
+            worth 2M. If you cannot use them effectively, bank them.
+          </li>
+        </ul>
+      </div>
+
+      <!-- 2. Card Priority -->
+      <div class="section">
+        <h2>Card Priority: What to Play First</h2>
+        <p>
+          Not all cards are created equal. Follow this priority order to maximize the value of each
+          turn.
+        </p>
+        <ul class="tier-list">
+          <li>
+            <span class="tier-label">Tier 1</span>
+            <span><strong>Pass Go</strong> &mdash; draw advantage is king. More cards mean more options every turn.</span>
+          </li>
+          <li>
+            <span class="tier-label">Tier 2</span>
+            <span><strong>Properties</strong> &mdash; build toward complete sets. Every property on the table is progress toward winning.</span>
+          </li>
+          <li>
+            <span class="tier-label">Tier 3</span>
+            <span><strong>Rent cards</strong> &mdash; charge rent on colors where you already own properties. Maximum payoff.</span>
+          </li>
+          <li>
+            <span class="tier-label">Tier 4</span>
+            <span><strong>Bank remaining cards</strong> &mdash; if nothing else, grow your cash reserve.</span>
+          </li>
+        </ul>
+
+        <h3>When to Break Priority</h3>
+        <p>
+          Use Birthday or Debt Collector <em>before</em> banking if your opponent has lots of cards
+          or money. Stripping their resources early puts you in a stronger position for the mid-game.
+        </p>
+
+        <div class="tip-box">
+          <strong>Double Rent timing:</strong> Only worth playing on 3M+ rent. It costs 2 actions
+          total (Double Rent + Rent card), so make sure the payout justifies the cost.
+        </div>
+      </div>
+
+      <!-- 3. Property Set Strategy -->
+      <div class="section">
+        <h2>Property Set Strategy</h2>
+        <p>
+          Not all property sets are equally valuable. Knowing which to target and which to avoid is
+          the difference between winning and losing.
+        </p>
+
+        <h3>Set Completion Speed</h3>
+        <ul>
+          <li>
+            <strong>Fastest to complete:</strong> Brown (2 cards) and Dark Blue (2 cards) &mdash;
+            but Brown pays the least rent.
+          </li>
+          <li>
+            <strong>Highest rent:</strong> Dark Blue pays 3M base and 8M when complete. Green pays
+            2M / 4M / 7M.
+          </li>
+          <li>
+            <strong>Best value per card:</strong> Dark Blue &mdash; 8M max rent with only 2 cards
+            needed. No other set comes close in efficiency.
+          </li>
+        </ul>
+
+        <h3>Sets to Avoid</h3>
+        <ul>
+          <li>
+            <strong>Railroad trap:</strong> Requires 4 cards to complete with only medium rent. Do
+            not commit to Railroads unless you are dealt 2 or more early.
+          </li>
+          <li>
+            <strong>Utility:</strong> Only 2 cards needed but the rent caps at 2M. Good as a quick
+            filler set, but never prioritize it.
+          </li>
+        </ul>
+
+        <h3>Color Priority Ranking</h3>
+        <ul class="color-ranking">
+          <li><span class="rank">1.</span> Dark Blue</li>
+          <li><span class="rank">2.</span> Green</li>
+          <li><span class="rank">3.</span> Red</li>
+          <li><span class="rank">4.</span> Yellow</li>
+          <li><span class="rank">5.</span> Orange</li>
+          <li><span class="rank">6.</span> Pink</li>
+          <li><span class="rank">7.</span> Light Blue</li>
+          <li><span class="rank">8.</span> Railroad</li>
+          <li><span class="rank">9.</span> Brown</li>
+          <li><span class="rank">10.</span> Utility</li>
+        </ul>
+      </div>
+
+      <!-- 4. Action Card Strategy -->
+      <div class="section">
+        <h2>Action Card Strategy</h2>
+        <p>
+          Action cards can swing the entire game in a single turn. Here is how to get maximum value
+          from each one.
+        </p>
+
+        <h3>Deal Breaker</h3>
+        <p>
+          The most powerful card in the game. Target the most valuable complete set your opponent
+          owns. Never waste a Deal Breaker on Brown or Utility &mdash; save it for Dark Blue, Green,
+          or Red.
+        </p>
+
+        <h3>Sly Deal vs. Forced Deal</h3>
+        <p>
+          <strong>Sly Deal</strong> is pure theft &mdash; it is almost always better because you gain
+          a card without giving anything up. Use <strong>Forced Deal</strong> when you need a
+          specific card to complete a set and can afford to trade away a less valuable property.
+        </p>
+
+        <h3>Birthday vs. Debt Collector</h3>
+        <p>
+          <strong>Birthday</strong> collects 2M from each opponent &mdash; it is better in 3&ndash;4
+          player games where you get 6&ndash;8M total. <strong>Debt Collector</strong> takes 5M from
+          one player &mdash; stronger in 2-player games and when one opponent is cash-rich.
+        </p>
+
+        <h3>Double Rent</h3>
+        <p>
+          Combine with Dark Blue or Green rent for a devastating 14M&ndash;16M charge. This
+          two-card combo can bankrupt an opponent in a single play.
+        </p>
+
+        <h3>Pass Go</h3>
+        <p>
+          Always play Pass Go immediately when you draw it. Card advantage wins games. The sooner you
+          draw more cards, the more options you have for the rest of the game.
+        </p>
+      </div>
+
+      <!-- 5. Defense Strategy -->
+      <div class="section">
+        <h2>Defense Strategy</h2>
+        <p>
+          Winning is not just about attacking &mdash; knowing when and how to protect your assets is
+          equally important.
+        </p>
+        <ul>
+          <li>
+            <strong>Just Say No has 4M bank value</strong> &mdash; but saving it for defense is
+            almost always worth more than banking it. A well-timed JSN can prevent a 10M+ swing.
+          </li>
+          <li>
+            <strong>Counter chains:</strong> If your opponent plays Just Say No on your Just Say No,
+            you need a third JSN to win the chain. Keep track of how many JSN cards have been played.
+          </li>
+          <li>
+            <strong>Spread your properties:</strong> Protect near-complete sets by keeping properties
+            across multiple colors. This makes it harder for opponents to target one critical set.
+          </li>
+          <li>
+            <strong>Keep hand size manageable:</strong> Aim for 5&ndash;6 cards in hand. Going over
+            7 at end of turn means you must discard &mdash; and discarding good cards hurts.
+          </li>
+        </ul>
+
+        <div class="tip-box">
+          <strong>Pro tip:</strong> Track which Just Say No cards have been played. There are only 3
+          in the deck. If all 3 are gone, your Deal Breaker is guaranteed to land.
+        </div>
+      </div>
+
+      <!-- 6. Wildcard & Joker Strategy -->
+      <div class="section">
+        <h2>Wildcard &amp; Joker Strategy</h2>
+        <p>
+          Wildcards and jokers are the most flexible cards in the game. Used correctly, they
+          accelerate your path to victory.
+        </p>
+        <ul>
+          <li>
+            <strong>Rainbow joker (0M value):</strong> Never bank it. A rainbow joker is worth 0M in
+            the bank but could be the card that completes a set. Always play it as a property.
+          </li>
+          <li>
+            <strong>Dual-color jokers:</strong> Place them on the color where you need fewer
+            additional cards to complete the set. Efficiency is everything.
+          </li>
+          <li>
+            <strong>Move jokers strategically:</strong> If one of your sets becomes complete without
+            a joker, move the joker to a set that still needs it.
+          </li>
+          <li>
+            <strong>Jokers in complete sets are protected:</strong> Once a set is finished, the joker
+            inside cannot be stolen via Sly Deal or Forced Deal. Complete the set to lock it down.
+          </li>
+        </ul>
+      </div>
+
+      <!-- 7. Advanced Tactics -->
+      <div class="section">
+        <h2>Advanced Tactics</h2>
+        <p>
+          These advanced strategies separate good players from great ones. Master them to win
+          consistently at the highest level.
+        </p>
+
+        <h3>House &amp; Hotel Stacking</h3>
+        <p>
+          Houses add 3M rent and Hotels add 4M on top. Build on your highest-rent complete set.
+          A Dark Blue set with a House and Hotel charges 8M + 3M + 4M = <strong>15M rent</strong>
+          &mdash; enough to cripple any opponent.
+        </p>
+
+        <h3>Hand Management</h3>
+        <p>
+          Try to end each turn with exactly 7 cards &mdash; the maximum hand size. This gives you
+          the most options on your next turn without being forced to discard.
+        </p>
+
+        <h3>Read Your Opponent</h3>
+        <p>
+          If your opponent is one card away from completing a set, act now. Steal the key property
+          with Sly Deal, or save your Just Say No for when they try to complete it. Waiting one turn
+          too long can cost you the game.
+        </p>
+
+        <h3>Tempo Control</h3>
+        <p>
+          Sometimes ending your turn early with only 2 actions used is the correct play. If your
+          third action would be a wasted move or force you to play a card you want to save, skip it.
+          Tempo is about making every action count, not using every action.
+        </p>
+
+        <h3>Bluffing with the Bank</h3>
+        <p>
+          Bank a Just Say No card to make your opponent think you do not have one in hand. They may
+          play their Deal Breaker into your <em>actual</em> JSN, wasting their best card.
+          Alternatively, banking it signals weakness &mdash; use this to bait aggressive plays you
+          are ready to counter.
+        </p>
+
+        <div class="tip-box">
+          <strong>Win condition reminder:</strong> You need 3 complete property sets to win. Always
+          keep count of how many sets each player has. The game can end suddenly.
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta">
+        <p>Put these strategies to the test &mdash; play now for free!</p>
+        <a href="index.html" class="cta-button">Play Stealr.io</a>
+      </div>
+
+      <!-- Footer -->
+      <footer>
+        <ul class="footer-links">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="rules.html">Rules</a></li>
+          <li><a href="cards.html">Cards</a></li>
+          <li><a href="strategy.html">Strategy</a></li>
+          <li><a href="privacy.html">Privacy</a></li>
+        </ul>
+        <span class="copyright">&copy; 2026 Stealr.io</span>
+      </footer>
+    </div>
+  </body>
+</html>

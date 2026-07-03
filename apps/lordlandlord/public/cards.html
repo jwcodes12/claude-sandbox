@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Browse all 106 cards in Stealr.io — the free online property trading card game. Complete card catalog with Money, Property, Action, Rent, Theft, and Wildcard cards."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="cards.html" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://stealr.io/cards" />
+    <meta property="og:title" content="All 106 Cards in Stealr.io | Complete Card Catalog" />
+    <meta
+      property="og:description"
+      content="Browse every card in Stealr.io — Money, Property, Action, Rent, Theft, and Wildcard cards. Free online property trading card game."
+    />
+    <meta property="og:image" content="https://stealr.io/StealrLogoQuer.jpg" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="All 106 Cards in Stealr.io | Complete Card Catalog" />
+    <meta
+      name="twitter:description"
+      content="Browse every card in Stealr.io — the free online property trading card game."
+    />
+    <meta name="twitter:image" content="https://stealr.io/StealrLogoQuer.jpg" />
+
+    <title>All 106 Cards in Stealr.io | Complete Card Catalog & Reference</title>
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-K338QN7G09"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+      gtag('config', 'G-K338QN7G09');
+    </script>
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "name": "Stealr.io Complete Card Catalog",
+        "description": "All 106 cards in Stealr.io — the free online property trading card game",
+        "numberOfItems": 106,
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Money Cards (20 cards)",
+            "description": "Bank cards worth 1M to 10M. Protected from theft."
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Property Cards (28 cards)",
+            "description": "Collect properties in 10 colors to build complete sets."
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Action Cards (35 cards)",
+            "description": "Pass Go, Birthday, Debt Collector, Double Rent, Deal Breaker, Sly Deal, Forced Deal, Just Say No."
+          },
+          {
+            "@type": "ListItem",
+            "position": 4,
+            "name": "Rent Cards (13 cards)",
+            "description": "Collect rent from opponents based on your properties."
+          },
+          {
+            "@type": "ListItem",
+            "position": 5,
+            "name": "Wildcard/Joker Cards (10 cards)",
+            "description": "Count as any color property. Dual jokers flip between 2 colors."
+          },
+          {
+            "@type": "ListItem",
+            "position": 6,
+            "name": "Building Cards (6 cards)",
+            "description": "Houses and Hotels increase rent on complete sets."
+          }
+        ]
+      }
+    </script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #f0ede6;
+        color: #1a1a1a;
+        padding: 24px;
+        min-height: 100vh;
+      }
+      .catalog-header {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+      .catalog-header h1 {
+        font-size: clamp(24px, 5vw, 40px);
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        margin-bottom: 8px;
+      }
+      .catalog-header p {
+        font-size: 14px;
+        color: #888;
+      }
+      .catalog-header a {
+        color: #1a1a1a;
+        text-decoration: underline;
+        font-weight: 700;
+        font-size: 13px;
+      }
+      .section {
+        margin-bottom: 40px;
+      }
+      .section-header {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 3px solid #1a1a1a;
+      }
+      .section-header h2 {
+        font-size: 20px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .section-header .count {
+        font-size: 13px;
+        font-weight: 700;
+        color: #888;
+      }
+      .section-desc {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 12px;
+      }
+      .card-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      .card-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .card-item .card-label {
+        font-size: 9px;
+        font-weight: 700;
+        color: #888;
+        text-align: center;
+        max-width: 85px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .color-group {
+        margin-bottom: 16px;
+      }
+      .color-group-title {
+        font-size: 13px;
+        font-weight: 800;
+        margin-bottom: 8px;
+        padding: 4px 12px;
+        border-radius: 4px;
+        display: inline-block;
+      }
+      .subsection {
+        margin-bottom: 20px;
+      }
+      .subsection-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #666;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      /* Disable hover/active effects in catalog */
+      .card:hover {
+        transform: none !important;
+        box-shadow: 3px 3px 0px #1a1a1a !important;
+      }
+      .card:active {
+        transform: none !important;
+        box-shadow: 3px 3px 0px #1a1a1a !important;
+      }
+      .card {
+        cursor: default !important;
+      }
+      @media (max-width: 640px) {
+        body {
+          padding: 12px;
+        }
+        .card-grid {
+          gap: 8px;
+        }
+        .card-item .card-label {
+          max-width: 60px;
+          font-size: 7px;
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="assets/cards-x7JpNJHd.js"></script>
+    <link rel="modulepreload" crossorigin href="assets/deck-DPdWmUlV.js">
+    <link rel="stylesheet" crossorigin href="assets/deck-Bmezk7Zb.css">
+  </head>
+  <body>
+    <nav
+      style="
+        max-width: 1200px;
+        margin: 0 auto 16px;
+        display: flex;
+        gap: 16px;
+        font-size: 13px;
+        font-weight: 700;
+      "
+    >
+      <a href="index.html" style="color: #1a1a1a">Play Now</a>
+      <a href="rules.html" style="color: #1a1a1a">Rules</a>
+      <a href="strategy.html" style="color: #1a1a1a">Strategy</a>
+      <a href="cards.html" style="color: #888">Cards</a>
+    </nav>
+
+    <div
+      style="
+        max-width: 1200px;
+        margin: 0 auto 24px;
+        font-size: 13px;
+        color: #4a4a4a;
+        line-height: 1.6;
+      "
+    >
+      <p>
+        Browse all <strong>106 cards</strong> in Stealr.io — the free online property trading card
+        game. The deck includes 20 Money cards, 28 Property cards across 10 colors, 35 Action cards,
+        13 Rent cards, 10 Wildcards/Jokers, and 6 Building cards (Houses &amp; Hotels).
+      </p>
+    </div>
+
+    <div id="catalog"></div>
+
+    <footer
+      style="
+        max-width: 1200px;
+        margin: 32px auto 0;
+        padding-top: 16px;
+        border-top: 2px solid #e8e4dc;
+        font-size: 12px;
+        color: #888;
+        text-align: center;
+      "
+    >
+      <a href="index.html" style="color: #1a1a1a">Play Now</a> &middot;
+      <a href="rules.html" style="color: #1a1a1a">Rules</a> &middot;
+      <a href="strategy.html" style="color: #1a1a1a">Strategy Guide</a> &middot;
+      <a href="privacy.html" style="color: #888">Privacy</a>
+      <p style="margin-top: 8px">&copy; 2026 Stealr.io</p>
+    </footer>
+
+  </body>
+</html>

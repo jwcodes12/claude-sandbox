@@ -1,0 +1,19 @@
+{
+  "name": "lord-landlord",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Medieval Monopoly Deal Engine",
+  "scripts": {
+    "dev": "node serve.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "playwright": "^1.60.0"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0",
+    "vitest": "^1.6.0"
+  }
+}
