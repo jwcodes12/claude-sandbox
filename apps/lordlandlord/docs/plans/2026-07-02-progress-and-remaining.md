@@ -133,14 +133,29 @@ The writer/client/protocol stayed untouched (verified: `git diff` clean on `net/
   convergence, zero page/console errors; `node tests/e2e/solo-smoke.mjs` → solo board renders,
   zero errors; `node server/index.js` boot check binds 18181.
 
+### Step 7 — Reconnect & resume UX *(done; GitHub #12, monorepo working tree)*
+Built on the proven `reconnect()`/snapshot mechanics; no host migration (server is authority).
+- Session persistence: `{roomId, seat, seatToken, ws}` in `localStorage` (`ll-session`), saved on
+  every `joined`. Page load auto-rejoins the stored seat (`tryResumeStoredSession`); an explicit
+  `?room=` link to a *different* room wins. Cleared on leave, game over, and dead-session
+  rejection (`bad-room`/`bad-token` → friendly hint, back to splash).
+- Server: post-start rejoin now re-sends `{t:'started', seed, players}` after `joined` so a
+  refreshed page (no local state) rebuilds byte-identical v0 before pulling the catch-up
+  snapshot — pure snapshot adoption alone breaks at writer version 0. New server test covers a
+  from-scratch client rebuilding v0 + catching up via `reconnect()`.
+- Transport: `rejoin()` before the socket opens no longer double-sends (open() already rebinds
+  from stored creds).
+- UX: `#net-status-banner` ("Reconnecting…"/"Rejoining your realm…") while this client is
+  offline or resuming; `#net-peers-banner` ("<name> disconnected — …") from `{t:'room'}`
+  presence during a started game, cleared when they return. Styles in `src/css/styles.css`.
+- **Verified (2026-07-04):** `npx vitest run` → **220/220**; `npm run test:e2e:resume`
+  (`tests/e2e/refresh-resume.mjs`) → 3/3 consecutive: mid-game `page.reload()` rejoins same
+  seat and converges, server-side socket kill shows both banners, auto-rejoin clears them and
+  converges; `npm run test:e2e` and solo smoke still green.
+
 ---
 
 ## Part 2 — Remaining work
-
-### Step 7 — Reconnect & resume (browser-side polish)
-Mostly proven at the net layer (client `reconnect()`, writer rebuild from Accepted log). Remaining
-is UX: page refresh re-joins via stored room/seat token, "reconnecting…" indicator, and a
-disconnected-seat banner for others. No host migration needed — the server is the authority.
 
 ### Step 8 — Cleanup
 - Delete legacy `engine.js` wrappers (`initGameState`, `startTurn`, … singleton bindings) and

@@ -145,7 +145,11 @@ export function createWsSession({ url }) {
         rejoin(roomId, seat, seatToken) {
             creds = { roomId, seat, seatToken };
             expectRejoin = true;
-            rawSend({ t: 'rejoin', roomId, seat, seatToken });
+            // Only send on an open socket — open() already sends a rejoin from
+            // creds, so queueing here would double-bind (server: 'bad-frame').
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ t: 'rejoin', roomId, seat, seatToken }));
+            }
         },
         addBot() { rawSend({ t: 'add-bot' }); },
         start() { rawSend({ t: 'start' }); },

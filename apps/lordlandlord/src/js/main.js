@@ -44,6 +44,7 @@ let activeLocalGame = null;
 // gameState is only ever a mirror of accepted state.
 let activeNetGame = null;     // { session, client, seat } | null
 let netSession = null;        // lazy singleton createWsSession
+let netResuming = false;      // a stored session is being re-established (Step 7)
 let netInfo = null;           // { roomId, seat, seatToken } from the last 'joined'
 let viewMeta = {
     localPlayerId: 0,
@@ -137,14 +138,48 @@ function init() {
         const nameInput = document.getElementById('player-name-join');
         if (nameInput) nameInput.focus();
     }
+
+    // Step 7: refresh mid-session? Rebind the stored seat straight away.
+    tryResumeStoredSession();
 }
 
 // ---- WebSocket lobby / game wiring (Step 6b) -------------------------------
 
+// Step 7: the current room/seat/token survives page refresh in localStorage so
+// a reload lands straight back in the same seat via {t:'rejoin'} + Resume.
+const NET_SESSION_KEY = 'll-session';
+
+function saveNetSession() {
+    if (!netInfo) return;
+    try {
+        localStorage.setItem(NET_SESSION_KEY, JSON.stringify({
+            roomId: netInfo.roomId,
+            seat: netInfo.seat,
+            seatToken: netInfo.seatToken,
+            ws: wsUrl()
+        }));
+    } catch (_e) { /* private mode etc. — refresh-resume just won't work */ }
+}
+
+function loadNetSession() {
+    try {
+        const raw = localStorage.getItem(NET_SESSION_KEY);
+        if (!raw) return null;
+        const s = JSON.parse(raw);
+        return (s && s.roomId && s.seatToken != null && s.seat != null) ? s : null;
+    } catch (_e) { return null; }
+}
+
+function clearNetSession() {
+    try { localStorage.removeItem(NET_SESSION_KEY); } catch (_e) { /* ignore */ }
+}
+
 function wsUrl() {
     const qs = new URLSearchParams(location.search);
+    const stored = loadNetSession();
     return qs.get('ws')
         || (typeof window !== 'undefined' && window.LL_WS_URL)
+        || (stored && stored.ws)
         || `ws://${location.hostname}:18181`;
 }
 
@@ -152,24 +187,96 @@ function netShareLink(roomId) {
     return `${location.origin}${location.pathname}?room=${encodeURIComponent(roomId)}`;
 }
 
+// Step 7 UX: two lightweight banners layered over the game.
+//   #net-status-banner — THIS client is offline / re-establishing its seat.
+//   #net-peers-banner  — another human seat dropped; the writer plays on.
+function netBanner(id) {
+    let el = document.getElementById(id);
+    if (!el) {
+        el = document.createElement('div');
+        el.id = id;
+        el.className = `net-banner ${id === 'net-status-banner' ? 'net-banner-self' : 'net-banner-peers'} hidden`;
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+function showNetBanner(id, text) {
+    const el = netBanner(id);
+    el.textContent = text;
+    el.classList.remove('hidden');
+}
+
+function hideNetBanner(id) {
+    netBanner(id).classList.add('hidden');
+}
+
+// Other seats' presence, from {t:'room'} broadcasts during a started game.
+function updatePeerPresence(players) {
+    if (!activeNetGame) return;
+    const away = players.filter(p =>
+        !p.isBot && p.connected === false && p.seat !== activeNetGame.seat);
+    if (away.length) {
+        const names = away.map(p => p.name).join(', ');
+        showNetBanner('net-peers-banner', `⚠ ${names} disconnected — the realm awaits their return…`);
+    } else {
+        hideNetBanner('net-peers-banner');
+    }
+}
+
 function ensureNetSession() {
     if (netSession) return netSession;
     netSession = createWsSession({ url: wsUrl() });
     netSession.onJoined(handleNetJoined);
-    netSession.onRoom(renderNetLobby);
+    netSession.onRoom((players) => {
+        renderNetLobby(players);
+        updatePeerPresence(players);
+    });
     netSession.onStarted(handleNetStarted);
     netSession.onRejoined(() => {
         // Post-start rebind: ask the writer for a catch-up snapshot.
         if (activeNetGame) activeNetGame.client.reconnect();
+        hideNetBanner('net-status-banner');
     });
     netSession.onError((err) => {
+        // A dead stored session (room reaped, token stale) must not wedge the
+        // splash behind a "reconnecting" banner forever.
+        if (netResuming && (err.code === 'bad-room' || err.code === 'bad-token')) {
+            netResuming = false;
+            clearNetSession();
+            hideNetBanner('net-status-banner');
+            flashHint('Your previous realm has ended.');
+            return;
+        }
         flashHint(err.message || err.code || 'Realm error.');
     });
     netSession.onStatus((s) => {
-        if (s === 'reconnecting') flashHint('Connection lost — reconnecting…');
-        else if (s === 'open' && activeNetGame) flashHint('Reconnected to the realm.');
+        if (s === 'reconnecting') {
+            if (activeNetGame || netResuming) {
+                showNetBanner('net-status-banner', '⚠ Connection lost — reconnecting…');
+            }
+        } else if (s === 'open' && activeNetGame) {
+            flashHint('Reconnected to the realm.');
+        } else if (s === 'closed') {
+            hideNetBanner('net-status-banner');
+        }
     });
     return netSession;
+}
+
+// Step 7: page refresh mid-session → rebind the stored seat automatically.
+// The server answers with 'joined' (+ a re-sent 'started' when the game is
+// live), handleNetStarted rebuilds v0 and pulls a catch-up snapshot.
+function tryResumeStoredSession() {
+    const stored = loadNetSession();
+    if (!stored) return false;
+    // An explicit ?room= link to a DIFFERENT room wins over the stored session.
+    const roomParam = new URLSearchParams(location.search).get('room');
+    if (roomParam && roomParam !== stored.roomId) return false;
+    netResuming = true;
+    showNetBanner('net-status-banner', '⚔ Rejoining your realm…');
+    ensureNetSession().rejoin(stored.roomId, stored.seat, stored.seatToken);
+    return true;
 }
 
 function onCreateRealm() {
@@ -191,10 +298,21 @@ function onJoinRealm() {
 
 function handleNetJoined(msg) {
     netInfo = { roomId: msg.roomId, seat: msg.seat, seatToken: msg.seatToken };
+    saveNetSession();
     if (activeNetGame) {
         // Mid-game rejoin confirmation; onRejoined handles the snapshot pull.
         activeNetGame.seat = msg.seat;
         return;
+    }
+    if (msg.started) {
+        // Refresh-resume into a live game: skip the lobby — the server re-sends
+        // {t:'started'} right after this frame and handleNetStarted takes over.
+        return;
+    }
+    if (netResuming) {
+        // Resumed into a room still in its lobby phase.
+        netResuming = false;
+        hideNetBanner('net-status-banner');
     }
     document.getElementById('splash-container').classList.add('hidden');
     document.getElementById('lobby-container').classList.remove('hidden');
@@ -249,8 +367,8 @@ function renderNetLobby(players) {
 
 function handleNetStarted(msg) {
     if (!netInfo || activeNetGame) return;
+    if (activeLocalGame) return;   // a solo game is running; ignore stray net frames
     const seat = netInfo.seat;
-    activeLocalGame = null;
 
     // Byte-identical v0 state from the exact descriptors the server used.
     const initial = createInitialState(msg.seed, msg.players);
@@ -279,6 +397,15 @@ function handleNetStarted(msg) {
 
     ensureInputAttached();
     exposeNetTestHook();
+
+    if (netResuming) {
+        // Refresh-resume: v0 was rebuilt from the re-sent seed/players; now
+        // pull the catch-up snapshot from the writer.
+        netResuming = false;
+        hideNetBanner('net-status-banner');
+        client.reconnect();
+    }
+
     syncGameStateFromNet();
     update();
 }
@@ -363,6 +490,13 @@ function injectSoloButton() {
 
 function onSoloGame() {
     activeNetGame = null;
+    // Abandon any in-flight stored-session resume; solo owns the screen now.
+    if (netResuming) {
+        netResuming = false;
+        hideNetBanner('net-status-banner');
+        if (netSession) { netSession.close(); netSession = null; }
+        netInfo = null;
+    }
     document.getElementById('splash-container').classList.add('hidden');
     document.getElementById('game-container').classList.remove('hidden');
     startLocalGame(3);
@@ -546,6 +680,7 @@ function updateLobbyUI() {
 
 function leaveLobby() {
     if (netSession) netSession.leave();
+    clearNetSession();   // deliberate exit: never auto-resume this seat again
     document.getElementById('lobby-container').classList.add('hidden');
     document.getElementById('splash-container').classList.remove('hidden');
     lobbyPeers = [];
@@ -770,6 +905,10 @@ function update() {
     if (winnerId !== null && winnerId !== lastShownWinnerId) {
         lastShownWinnerId = winnerId;
         gameState._gameOver = true;
+        if (activeNetGame) {
+            clearNetSession();   // finished realm: a refresh should not rejoin it
+            hideNetBanner('net-peers-banner');
+        }
         showBanner(winnerId === gameState.localPlayerId ? 'THE CROWN IS YOURS!' : 'YOUR KINGDOM HAS FALLEN');
     }
 

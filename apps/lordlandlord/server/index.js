@@ -271,6 +271,14 @@ export async function createGameServer(opts = {}) {
             started: room.started,
             players: roster(room)
         });
+        // Post-start rejoin (page refresh): re-send the start frame so the
+        // browser can rebuild the byte-identical v0 state before it asks the
+        // writer for a catch-up snapshot. Without this a refreshed page has no
+        // seed/players — and pure snapshot adoption breaks when the writer is
+        // still at version 0 (v0 snapshot <= client's v0 is ignored).
+        if (room.started) {
+            sendTo(ws, { t: 'started', seed: room.seed, players: room.playersDesc });
+        }
         updatePresence(room);
         broadcastRoom(room);
     }
@@ -330,6 +338,7 @@ export async function createGameServer(opts = {}) {
         room.writer = createWriter({ seed, players, channel: room.channel });
         room.started = true;
         room.seed = seed;
+        room.playersDesc = players;   // kept so post-start rejoins can rebuild v0
 
         const frame = { t: 'started', seed, players };
         for (const s of room.seats) if (s && !s.isBot) sendTo(s.ws, frame);

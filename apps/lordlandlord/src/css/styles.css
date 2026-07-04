@@ -1928,3 +1928,35 @@ canvas {
     }
 }
 
+
+/* ---- Step 7: net reconnect/presence banners -------------------------------- */
+.net-banner {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 300;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    max-width: 90vw;
+    text-align: center;
+}
+.net-banner-self {
+    top: 10px;
+    background: #7a1f1f;
+    color: #ffe9c9;
+    border: 1px solid #b3541e;
+}
+.net-banner-peers {
+    top: 52px;
+    background: #4a3a1f;
+    color: #ffe9c9;
+    border: 1px solid #8a6d3b;
+}
+.net-banner.hidden {
+    display: none;
+}

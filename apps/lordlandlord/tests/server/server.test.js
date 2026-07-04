@@ -284,6 +284,54 @@ describe('gameplay over real sockets', () => {
         expect(clients[0].hashOf()).toBe(writer.hashOf());
     });
 
+    // Step 7: a page refresh has NO local state, so the server re-sends the
+    // start frame on a post-start rejoin — the fresh page rebuilds v0 from it,
+    // then reconnect() pulls the catch-up snapshot.
+    it('re-sends {t:"started"} on post-start rejoin so a fresh page can rebuild v0', async () => {
+        const server = await boot();
+        const { a, b, jb, shells, clients, writer, roomId } = await startTwoHumanGame(server);
+        const originalSeed = writer.getState().seed ?? null;
+
+        // Advance the game a little.
+        for (let i = 0; i < 3; i++) {
+            const step = stepAction(writer);
+            if (!step) break;
+            const target = writer.getVersion() + 1;
+            clients[step.seat].submit(step.action);
+            await converge(writer, clients, target);
+        }
+        expect(writer.getVersion()).toBeGreaterThan(0);
+
+        // "Refresh": seat 1's socket dies; a brand-new connection rejoins with
+        // only {roomId, seat, seatToken} — exactly what localStorage holds.
+        b.sock.terminate();
+        await b.closed;
+        const fresh = await connect(server.port);
+        fresh.send({ t: 'rejoin', roomId, seat: 1, seatToken: jb.seatToken });
+        const j = await fresh.next('joined');
+        expect(j.started).toBe(true);
+        const restart = await fresh.next('started');
+        expect(typeof restart.seed).toBe('number');
+        expect(Array.isArray(restart.players)).toBe(true);
+        if (originalSeed != null) expect(restart.seed).toBe(originalSeed);
+
+        // Rebuild v0 exactly like a refreshed browser would, then catch up.
+        const shell = makeShell();
+        shell.attach(fresh);
+        const rebuilt = createClient({
+            seat: 1,
+            channel: shell,
+            state: createInitialState(restart.seed, restart.players),
+            clientId: 'c1',
+            idSource: makeIdSource('c1-fresh')
+        });
+        rebuilt.reconnect();
+        await waitFor(() => rebuilt.getVersion() === writer.getVersion(), 4000, 'rebuilt client catch-up');
+        expect(rebuilt.hashOf()).toBe(writer.hashOf());
+        expect(clients[0].hashOf()).toBe(writer.hashOf());
+        void a;
+    });
+
     it('drives bot seats: a bot takes its whole turn unattended', async () => {
         const server = await boot();
         const a = await connect(server.port);
