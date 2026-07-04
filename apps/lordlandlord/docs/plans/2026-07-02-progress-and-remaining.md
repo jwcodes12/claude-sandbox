@@ -153,18 +153,33 @@ Built on the proven `reconnect()`/snapshot mechanics; no host migration (server 
   seat and converges, server-side socket kill shows both banners, auto-rejoin clears them and
   converges; `npm run test:e2e` and solo smoke still green.
 
+### Step 8 — Cleanup *(done; GitHub #13, monorepo working tree)*
+- `engine.js` singleton + legacy wrappers deleted (920 → ~670 lines): no more exported
+  `gameState`, no `initGameState`/`startTurn`/… bindings. `tests/engine.test.js`,
+  `tests/scenarios.test.js`, and `simulate.js` migrated to the state-first API via a file-local
+  state object + thin binders — test bodies unchanged, all 111 still green.
+- `enumerateLegalActionsS` body folded into `core/legal.js` proper (engine.js no longer
+  enumerates legality at all; `legal.js` imports `checkWinnerS`/`playerHasPendingReactionS`).
+- `multiplayer.js` (PeerJS) deleted, along with the CDN `<script>` tag and the WebRTC
+  ICE/TURN config block in `src/index.html`. `main.js` lost ~600 lines of host-relay code
+  (`applyRemoteAction`, `broadcastSnapshot`, `handleSnapshot`, lobby peer bookkeeping,
+  singleton bot drivers). Games are now solo (`activeLocalGame`) or WebSocket (`activeNetGame`)
+  — nothing else.
+- `window.__game` is frozen and read-only: `state()` (clone), `enumerate`, `pickBest`,
+  `pickBestAny`, `checkWinner`. All mutation handles (dispatch/propose/playBotTurn/botReact/
+  setBotStrategy) are gone; `main.js`'s `gameState` is a module-local view mirror.
+- `initGameStateS` now throws without an explicit numeric seed; `generateDeck` requires a
+  seeded rng (unseeded `Math.random` shuffle fallback deleted).
+- Note: `ui-test/` still holds pre-rewrite standalone scripts that referenced the old handles;
+  they are historic artifacts, not product code (see AGENTS.md).
+- **Verified (2026-07-04):** `npx vitest run` → **220/220**; solo smoke, two-browser e2e, and
+  refresh/blip resume e2e all green; grep confirms no `Peer`/`peerjs`/singleton-mutation paths
+  remain in `src/js`, `server/`, or `tests/`.
+
 ---
 
 ## Part 2 — Remaining work
 
-### Step 8 — Cleanup
-- Delete legacy `engine.js` wrappers (`initGameState`, `startTurn`, … singleton bindings) and
-  migrate the old tests to the state-first API.
-- Remove the live `window.__game` mutation handle (read-only clone only) and the PeerJS
-  `multiplayer.js` path + its CDN script tag.
-- Fold `enumerateLegalActionsS`'s body into `core/legal.js` proper.
-- `initGameStateS` seed-fallback tightening; drop the unseeded `generateDeck` fallback.
-
-### Suggested order
-6b → 7 → 8. Each step ships green on the full suite before the next; 6b is the first point
-where two phones on different networks can actually play against the new stack.
+Steps 6b, 7, and 8 are complete — the reliability rewrite is done end-to-end. Remaining
+follow-ups are operational: enable `ops/systemd/lordlandlord.service` on the OCI box and expose
+the port via `tailscale funnel` (see `server/README.md`), then play a real two-phone game.

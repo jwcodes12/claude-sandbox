@@ -1,43 +1,30 @@
-import { generateDeck, CARD_TYPES, PROPERTIES } from './cards.js';
-import { createRng } from './core/rng.js';
+import { CARD_TYPES, PROPERTIES } from './cards.js';
 import { createInitialState, clone } from './core/state.js';
 import { enumerateLegalActions as enumerateLegalActionsForState } from './core/legal.js';
+import { playerHasPendingReactionS } from './engine.js';
 import { createLocalGame } from './app/local-game.js';
 import { createClient } from './net/client.js';
 import { createWsSession } from './net/ws-transport.js';
-import {
-    gameState,
-    initGameState,
-    drawCardFromDeck,
-    playCardToZone,
-    endTurn as engineEndTurn,
-    startTurn,
-    enumerateLegalActions,
-    executeAction,
-    checkWinner,
-    proposeAction,
-    reactJustSayNo,
-    resolvePendingAction,
-    playerHasPendingReaction,
-    swapWildColor
-} from './engine.js';
 import { render } from './render.js';
 import { attachInput } from './input.js';
-import { Multiplayer } from './multiplayer.js';
 import { infoForCard, CARD_LIBRARY } from './card-info.js';
 
-// In MP host mode, lobbyPeers tracks joined client peer IDs so we can
-// assign playerIds at game-start and re-broadcast lobby UI.
-let lobbyPeers = [];
-let lobbyBots = []; // Stores { id: string, difficulty: string }
+// View mirror of whichever authority is active (solo controller or net
+// client). Step 8: this is a plain module-local object — the engine's mutable
+// gameState singleton is gone. sync* functions overwrite it wholesale; nothing
+// outside this file can reach it (window.__game exposes clones only).
+const gameState = {
+    players: [],
+    deck: [],
+    discard: [],
+    turn: 0,
+    actionsLeft: 3,
+    mustDiscard: 0,
+    localPlayerId: 0,
+    pendingAction: null,
+};
+
 let inputAttached = false;
-// Map peerId -> playerId, populated by host on start. Used by host to know
-// which player slot an incoming action envelope from a peer belongs to.
-let peerToPlayer = new Map();
-let playerToPeer = new Map(); // Reverse map for migration
-// peerId -> chosen Lord name, populated by host from inbound hello messages.
-let peerNames = new Map();
-let hostName = '';
 let activeLocalGame = null;
 // Third authority path (Step 6b): a WebSocket game against the real server
 // writer. When set, ALL intents flow through client.submit and the local
@@ -56,7 +43,7 @@ let lastShownResolutionKey = null;
 let lastShownWinnerId = null;
 
 function isSoloControllerActive() {
-    return activeLocalGame !== null && !Multiplayer.isHost && !Multiplayer.isClient;
+    return activeLocalGame !== null;
 }
 
 function withViewMeta(state) {
@@ -95,20 +82,19 @@ function currentState() {
 
 function publicState() {
     if (activeNetGame) return withViewMeta(activeNetGame.client.getState());
-    return activeLocalGame ? withViewMeta(activeLocalGame.getState()) : gameState;
+    // No live handle escapes: the idle fallback clones the view mirror too.
+    return activeLocalGame ? withViewMeta(activeLocalGame.getState()) : clone(gameState);
 }
 
 function legalActionsFor(playerId, state = null) {
     if (activeNetGame) return enumerateLegalActionsForState(state || activeNetGame.client.getState(), playerId);
     if (activeLocalGame) return enumerateLegalActionsForState(state || activeLocalGame.peek(), playerId);
-    return enumerateLegalActions(playerId);
+    return [];   // no game running
 }
 
 function init() {
-    // Multiplayer (PeerJS) is no longer wired up here — the lobby now runs on
-    // the WebSocket game server (net/ws-transport.js). multiplayer.js itself
-    // is removed in Step 8.
-
+    // The lobby runs on the WebSocket game server (net/ws-transport.js); the
+    // old PeerJS path was removed in Step 8.
     injectSoloButton();
 
     document.getElementById('btn-copy-id').onclick = () => {
@@ -502,188 +488,11 @@ function onSoloGame() {
     startLocalGame(3);
 }
 
-function onHostGame() {
-    activeLocalGame = null;
-    const pass = (document.getElementById('room-pass-create')?.value || '').trim();
-    hostName = (document.getElementById('player-name-create')?.value || '').trim() || 'Host';
-    Multiplayer.becomeHost(pass);
-    lobbyPeers = [];
-    lobbyBots = [];
-    peerNames = new Map();
-    document.getElementById('splash-container').classList.add('hidden');
-    document.getElementById('lobby-container').classList.remove('hidden');
-    document.getElementById('btn-start-game').textContent = 'START REIGN';
-    const passLine = document.getElementById('lobby-pass-display');
-    if (passLine) passLine.textContent = pass ? `Pass: ${pass}` : '';
-    updateLobbyUI();
-}
-
-function onJoinGame() {
-    activeLocalGame = null;
-    const raw = (document.getElementById('join-game-id').value || '').trim();
-    // Accept "Green Duck Pond", "green_duck_pond", "GREEN-DUCK-POND" etc.
-    const hostId = raw.toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const pass = (document.getElementById('room-pass-join')?.value || '').trim();
-    if (!hostId) {
-        flashHint('Enter the Realm ID to join.');
-        return;
-    }
-    const joinName = (document.getElementById('player-name-join')?.value || '').trim() || `Lord ${Date.now() % 100}`;
-    Multiplayer.joinHost(hostId, pass, joinName);
-    document.getElementById('splash-container').classList.add('hidden');
-    document.getElementById('lobby-container').classList.remove('hidden');
-    document.getElementById('lobby-id-display').textContent = `Joining ${hostId}…`;
-    document.getElementById('btn-start-game').textContent = 'Awaiting host…';
-    document.getElementById('btn-start-game').disabled = true;
-    const slots = document.getElementById('lobby-slots');
-    slots.innerHTML = '<div class="lobby-slot empty"><span>Waiting for host to start…</span></div>';
-}
-
-function handlePeerJoined(peerId, name = '') {
-    if (!lobbyPeers.includes(peerId)) {
-        lobbyPeers.push(peerId);
-        lobbyPeers.sort(); // Consistent order for migration candidacy
-    }
-    if (name) peerNames.set(peerId, name);
-}
-
-function handlePeerLeft(peerId) {
-    lobbyPeers = lobbyPeers.filter(p => p !== peerId);
-    // If game in progress, mark that seat disconnected.
-    const playerId = peerToPlayer.get(peerId);
-    if (typeof playerId === 'number' && gameState.players[playerId]) {
-        gameState.players[playerId]._disconnected = true;
-        peerToPlayer.delete(peerId);
-        playerToPeer.delete(playerId);
-        // If it was their turn, auto-end so play doesn't stall.
-        if (gameState.turn === playerId && !gameState._gameOver) {
-            onEndTurn();
-        }
-    }
-}
-
-async function handleHostLost(reason) {
-    // If we never made it into a game, the user is stuck in the lobby. Send
-    // them back to the splash so they can try again instead of staring at
-    // "Joining…" forever.
-    const inGame = gameState && gameState.players && gameState.players.length;
-    if (!inGame) {
-        const lobby = document.getElementById('lobby-container');
-        const splash = document.getElementById('splash-container');
-        if (lobby) lobby.classList.add('hidden');
-        if (splash) splash.classList.remove('hidden');
-        const startBtn = document.getElementById('btn-start-game');
-        if (startBtn) {
-            startBtn.disabled = false;
-            startBtn.textContent = 'START REIGN';
-        }
-        if (reason) flashHint(reason);
-        return;
-    }
-
-    // Host Migration Logic
-    const myId = Multiplayer.peerId;
-    const humanPeers = lobbyPeers.filter(pid => pid !== myId);
-    const allHumans = [myId, ...humanPeers].sort();
-    const nextHostId = allHumans[0];
-
-    if (nextHostId === myId) {
-        showBanner('HOST DISCONNECTED. TAKING OVER...');
-        console.log(`[MIGRATION] I am the new host candidate.`);
-        
-        // Upgrade to host
-        Multiplayer.takeOverHost();
-        
-        // Re-bind players to peers based on our last known map
-        peerToPlayer.clear();
-        playerToPeer.forEach((pid, playerIdx) => {
-            if (pid !== myId) peerToPlayer.set(pid, playerIdx);
-        });
-
-        // Resume game
-        setTimeout(() => {
-            broadcastSnapshot();
-            update();
-            scheduleBotIfNeeded();
-            flashHint('Realm successfully migrated.');
-        }, 2000);
-    } else {
-        showBanner('HOST DISCONNECTED. MIGRATING...');
-        console.log(`[MIGRATION] Waiting for ${nextHostId} to take over.`);
-        
-        // Wait for the new host to set up and then try to rejoin
-        let attempts = 0;
-        const reJoin = () => {
-            if (attempts > 10 || gameState._gameOver) return;
-            Multiplayer.joinHost(nextHostId, '', gameState.players[gameState.localPlayerId]?.name);
-            attempts++;
-            setTimeout(reJoin, 5000);
-        };
-        setTimeout(reJoin, 4000);
-    }
-}
-
-function updateLobbyUI() {
-    if (!Multiplayer.isHost) return;
-    const slots = document.getElementById('lobby-slots');
-    slots.innerHTML = '';
-    const total = 1 + lobbyPeers.length + lobbyBots.length;
-    for (let i = 0; i < 5; i++) {
-        const slot = document.createElement('div');
-        if (i === 0) {
-            slot.className = 'lobby-slot';
-            slot.innerHTML = `<span>You (Host)</span><span class="status">Ready</span>`;
-        } else if (i <= lobbyPeers.length) {
-            slot.className = 'lobby-slot';
-            const pid = lobbyPeers[i - 1];
-            const label = peerNames.get(pid) || `Lord ${pid.slice(0, 6)}`;
-            slot.innerHTML = `<span>${label}</span><span class="status">Joined</span>`;
-        } else if (i <= lobbyPeers.length + lobbyBots.length) {
-            slot.className = 'lobby-slot';
-            const botIdx = i - 1 - lobbyPeers.length;
-            const bot = lobbyBots[botIdx];
-            slot.innerHTML = `
-                <span>🤖 AI Rival</span>
-                <select class="bot-difficulty-select" data-bot-idx="${botIdx}" style="background:#222; color:#fff; border:1px solid #444; padding:2px; border-radius:4px;">
-                    <option value="easy" ${bot.difficulty === 'easy' ? 'selected' : ''}>Easy</option>
-                    <option value="normal" ${bot.difficulty === 'normal' ? 'selected' : ''}>Normal</option>
-                    <option value="hard" ${bot.difficulty === 'hard' ? 'selected' : ''}>Hard</option>
-                </select>
-                <button class="btn-remove-bot" data-bot-idx="${botIdx}" style="background:transparent; border:none; color:#d4af37; cursor:pointer; font-size:16px;">×</button>
-            `;
-        } else {
-            slot.className = 'lobby-slot empty';
-            slot.innerHTML = `<span>Empty Slot</span>`;
-        }
-        slots.appendChild(slot);
-    }
-    
-    // Wire up bot controls
-    slots.querySelectorAll('.bot-difficulty-select').forEach(sel => {
-        sel.onchange = (e) => {
-            const idx = Number(e.target.dataset.botIdx);
-            if (lobbyBots[idx]) lobbyBots[idx].difficulty = e.target.value;
-        };
-    });
-    slots.querySelectorAll('.btn-remove-bot').forEach(btn => {
-        btn.onclick = (e) => {
-            const idx = Number(e.target.dataset.botIdx);
-            lobbyBots.splice(idx, 1);
-            updateLobbyUI();
-        };
-    });
-
-    const startBtn = document.getElementById('btn-start-game');
-    startBtn.disabled = (lobbyPeers.length + lobbyBots.length) < 1;
-    startBtn.textContent = `START REIGN (${total})`;
-}
-
 function leaveLobby() {
     if (netSession) netSession.leave();
     clearNetSession();   // deliberate exit: never auto-resume this seat again
     document.getElementById('lobby-container').classList.add('hidden');
     document.getElementById('splash-container').classList.remove('hidden');
-    lobbyPeers = [];
     // Hard reset: easiest way to drop session state is a reload.
     setTimeout(() => location.reload(), 50);
 }
@@ -692,103 +501,6 @@ function closeModal() {
     document.getElementById('picker-modal').classList.add('hidden');
 }
 
-function startGameFromLobby() {
-    if (!Multiplayer.isHost) return;
-    activeLocalGame = null;
-    const playerCount = 1 + lobbyPeers.length + lobbyBots.length;
-    if (playerCount < 2) return;
-    document.getElementById('lobby-container').classList.add('hidden');
-    document.getElementById('game-container').classList.remove('hidden');
-
-    // Pick a per-game seed (app layer may use Math.random; the engine core
-    // never does). Thread it through the initial shuffle, then hand the
-    // advanced rng cursor to initGameState so mid-game reshuffles continue
-    // the same reproducible stream.
-    const seed = (Math.random() * 0x100000000) >>> 0;
-    const rng = createRng(seed);
-    const rawDeck = generateDeck(playerCount >= 6 ? 2 : 1, rng);
-    const entities = rawDeck.map(card => ({ data: card, zone: 'deck', owner: null }));
-    initGameState([...entities], playerCount, seed, rng.state);
-    for (let i = 0; i < playerCount; i++) {
-        for (let c = 0; c < 5; c++) drawCardFromDeck(i);
-    }
-    gameState.turn = 0;
-    gameState.actionsLeft = 3;
-    gameState.localPlayerId = 0;
-    
-    // Ensure stress test flag propagates
-    if (window.__game_stress_test) gameState._isStressTest = true;
-
-    gameState.players[0].name = hostName || 'Host';
-    peerToPlayer = new Map();
-    
-    // Assign human peers
-    playerToPeer = new Map();
-    playerToPeer.set(0, Multiplayer.peerId); // Host is player 0
-    gameState.players[0]._peerId = Multiplayer.peerId;
-
-    lobbyPeers.forEach((peerId, idx) => {
-        const pid = idx + 1;
-        peerToPlayer.set(peerId, pid);
-        playerToPeer.set(pid, peerId);
-        gameState.players[pid].name = peerNames.get(peerId) || `Lord ${peerId.slice(0, 6)}`;
-        gameState.players[pid]._peerId = peerId;
-    });
-    
-    // Assign bots
-    const botNames = ['AI Lord Botly', 'AI Lady Robo', 'AI Baron Cogs', 'AI Sir Automata'];
-    lobbyBots.forEach((bot, idx) => {
-        const pid = 1 + lobbyPeers.length + idx;
-        gameState.players[pid].name = botNames[idx % botNames.length];
-        gameState.players[pid]._isBot = true;
-        gameState.players[pid]._difficulty = bot.difficulty;
-    });
-
-    ensureInputAttached();
-
-    // Snapshot is the JSON-serialisable shape of gameState. Each client
-    // overwrites their gameState with this and sets their localPlayerId
-    // from the per-peer assignment.
-    const stateSnapshot = JSON.parse(JSON.stringify(gameState));
-    for (const [peerId, pid] of peerToPlayer) {
-        Multiplayer.sendSnapshot({ playerId: pid, state: stateSnapshot }, peerId);
-    }
-
-    // Give snapshots a moment to propagate before starting the turn-0 bot
-    setTimeout(() => {
-        update();
-        scheduleBotIfNeeded();
-    }, 1500);
-}
-
-function handleSnapshot(msg) {
-    if (!msg.state) return;
-    activeLocalGame = null;
-    console.log(`[NET-DEBUG] Received snapshot from host. Local ID was ${gameState.localPlayerId}, will be ${msg.playerId}`);
-
-    // Adopt host's authoritative state.
-    document.getElementById('lobby-container').classList.add('hidden');
-    document.getElementById('game-container').classList.remove('hidden');
-    const fresh = JSON.parse(JSON.stringify(msg.state));
-    Object.assign(gameState, fresh);
-    gameState.localPlayerId = msg.playerId;
-
-    // Sync lobby metadata for migration potential
-    lobbyPeers = [];
-    playerToPeer.clear();
-    gameState.players.forEach((p, i) => {
-        if (p._peerId && p._peerId !== Multiplayer.peerId) {
-            lobbyPeers.push(p._peerId);
-            playerToPeer.set(i, p._peerId);
-        }
-    });
-    lobbyPeers.sort();
-
-    console.log(`[NET-DEBUG] State adopted. Deck size: ${gameState.deck.length}`);
-
-    ensureInputAttached();
-    update();
-}
 function ensureInputAttached() {
     if (inputAttached) return;
     const root = document.getElementById('game-root');
@@ -901,7 +613,7 @@ function update() {
 
     const winnerId = activeNetGame
         ? (gameState.winner ?? null)
-        : activeLocalGame ? activeLocalGame.winner() : checkWinner();
+        : activeLocalGame ? activeLocalGame.winner() : null;
     if (winnerId !== null && winnerId !== lastShownWinnerId) {
         lastShownWinnerId = winnerId;
         gameState._gameOver = true;
@@ -912,31 +624,7 @@ function update() {
         showBanner(winnerId === gameState.localPlayerId ? 'THE CROWN IS YOURS!' : 'YOUR KINGDOM HAS FALLEN');
     }
 
-    if (activeNetGame) {
-        maybeAutoEndNetTurn();
-        return;
-    }
-    if (activeLocalGame) return;
-
-    if (
-        !gameState._gameOver &&
-        gameState.turn === gameState.localPlayerId &&
-        gameState.actionsLeft <= 0 &&
-        gameState.pendingAction === null &&
-        gameState.mustDiscard === 0 &&
-        !gameState._autoEnding
-    ) {
-        // Auto-end turn when all 3 actions are spent. If hand>7, engineEndTurn
-        // sets mustDiscard and returns false; the turn indicator then enters the
-        // discard phase until the player drags enough cards away.
-        gameState._autoEnding = true;
-        const ok = engineEndTurn();
-        gameState._autoEnding = false;
-        Multiplayer.broadcastAction({ type: 'end-turn' }, gameState.localPlayerId);
-        if (Multiplayer.isHost) broadcastSnapshot();
-        update();
-        if (ok) scheduleBotIfNeeded();
-    }
+    if (activeNetGame) maybeAutoEndNetTurn();
 }
 
 
@@ -990,180 +678,6 @@ function dispatchAction(action) {
     if (isSoloControllerActive()) {
         submitSoloAction(action);
         return;
-    }
-
-    // Reaction actions can fire when it's not the local player's main turn.
-    const isReactionAction = action.type === 'react-no' || action.type === 'concede';
-    if (!isReactionAction && gameState.turn !== gameState.localPlayerId) return;
-
-    // Drag-to-play sentinel for cards that need a color/target picker
-    // (rent, buildings, propose-effect actions). Route through the same
-    // picker the tap path uses.
-    if (action.type === 'swap-wild') {
-        const ok = swapWildColor(gameState.localPlayerId, action.cardId, action.color);
-        if (ok) {
-            Multiplayer.broadcastAction(action, gameState.localPlayerId);
-            update();
-        }
-        return;
-    }
-
-    if (action.type === 'react-no') {
-        const reactingId = gameState.localPlayerId;
-        const card = gameState.players[reactingId].hand.find(c => c.data.id === action.cardId);
-        if (!card) return;
-        const againstReactorId = (action.againstReactorId !== undefined) ? action.againstReactorId : null;
-        reactJustSayNo(card, reactingId, againstReactorId);
-        Multiplayer.broadcastAction({ ...action, againstReactorId }, reactingId);
-        hideModal();
-        update();
-        scheduleReactionHandling();
-        return;
-    }
-    if (action.type === 'concede') {
-        const owed = debtOwedByLocal();
-        console.log(`[NET-DEBUG] dispatchAction(concede) localPlayerId=${gameState.localPlayerId}, owed=${owed}`);
-        if (owed > 0) {
-            const local = gameState.players[gameState.localPlayerId];
-            const bankTotal = local.bank.reduce((s, c) => s + (c.data.value || 0), 0);
-            const payableProps = Object.values(local.properties || {})
-                .flat()
-                .filter(c => (c.data.value || 0) > 0);
-            const propTotal = payableProps.reduce((s, c) => s + (c.data.value || 0), 0);
-            const payableBuildings = Object.values(local.buildings || {})
-                .flat()
-                .filter(c => (c.data.value || 0) > 0);
-            const buildingTotal = payableBuildings.reduce((s, c) => s + (c.data.value || 0), 0);
-            const totalAssets = bankTotal + propTotal + buildingTotal;
-            
-            console.log(`[NET-DEBUG] Assets: bank=${bankTotal}, props=${propTotal}, buildings=${buildingTotal}, total=${totalAssets}`);
-
-            if (totalAssets < owed && totalAssets > 0) {
-                console.log(`[NET-DEBUG] Shortfall detected! surrendering all assets.`);
-                const pa = gameState.pendingAction;
-                const attackerId = pa.attackerId;
-                const attacker = gameState.players[attackerId];
-                local.bank.slice().forEach(c => {
-                    local.bank = local.bank.filter(x => x !== c);
-                    c.owner = attackerId;
-                    attacker.bank.push(c);
-                });
-                payableProps.forEach(c => {
-                    const colorKey = Object.keys(local.properties).find(k => (local.properties[k] || []).includes(c));
-                    if (!colorKey) return;
-                    local.properties[colorKey] = local.properties[colorKey].filter(x => x !== c);
-                    c.owner = attackerId;
-                    const color = c.currentColor || colorKey;
-                    if (!attacker.properties[color]) attacker.properties[color] = [];
-                    attacker.properties[color].push(c);
-                });
-                payableBuildings.forEach(c => {
-                    const colorKey = Object.keys(local.buildings).find(k => (local.buildings[k] || []).includes(c));
-                    if (!colorKey) return;
-                    local.buildings[colorKey] = local.buildings[colorKey].filter(x => x !== c);
-                    c.owner = attackerId;
-                    c.zone = 'bank';
-                    attacker.bank.push(c);
-                });
-                
-                if (!pa.options) pa.options = {};
-                if (!pa.options.alreadyPaidIds) pa.options.alreadyPaidIds = [];
-                if (!pa.options.alreadyPaidIds.includes(gameState.localPlayerId)) pa.options.alreadyPaidIds.push(gameState.localPlayerId);
-
-                resolvePendingAction(gameState.localPlayerId);
-                Multiplayer.broadcastAction(action, gameState.localPlayerId);
-                hideModal();
-                update();
-                scheduleReactionHandling();
-                return;
-            }
-
-            if (totalAssets >= owed) {
-                console.log(`[NET-DEBUG] Assets sufficient, showing payment picker.`);
-                showPaymentPicker(owed);
-                return;
-            }
-            console.log(`[NET-DEBUG] No assets to pay (shortfall to 0), resolving...`);
-        }
-        resolvePendingAction(gameState.localPlayerId);
-        Multiplayer.broadcastAction(action, gameState.localPlayerId);
-        hideModal();
-        update();
-        scheduleReactionHandling();
-        return;
-    }
-
-    const card = findHandCard(gameState.localPlayerId, action.cardId);
-    if (!card) return;
-
-    if (action.type === 'propose') {
-        const opts = resolveProposeOptions(action);
-        proposeAction(card, gameState.localPlayerId, action.targetPlayerId, opts);
-        Multiplayer.broadcastAction(action, gameState.localPlayerId);
-        update();
-        scheduleReactionHandling();
-        return;
-    }
-
-    if (action.type === 'discard') {
-        // End-of-turn discard goes to the BOTTOM of the draw pile per rules,
-        // not the discard pile.
-        const local = gameState.players[gameState.localPlayerId];
-        local.hand = local.hand.filter(c => c !== card);
-        card.zone = 'deck';
-        card.owner = null;
-        gameState.deck.unshift(card);
-        Multiplayer.broadcastAction(action, gameState.localPlayerId);
-        if (gameState.mustDiscard > 0) {
-            gameState.mustDiscard--;
-            if (gameState.mustDiscard === 0) {
-                const ok = engineEndTurn();
-                if (ok) Multiplayer.broadcastAction({ type: 'end-turn' }, gameState.localPlayerId);
-                update();
-                if (ok) scheduleBotIfNeeded();
-                return;
-            }
-        }
-        update();
-        return;
-    }
-
-    if (action.type === 'play') {
-        if (
-            action.zone === 'board' &&
-            card.data.type === CARD_TYPES.JOKER &&
-            Array.isArray(card.data.allowedColors) &&
-            card.data.allowedColors.length > 1 &&
-            !(action.options && (action.options._colorPicked || action.options.color))
-        ) {
-            showWildColorPicker(card, card.data.allowedColors, (color) => {
-                dispatchAction({
-                    ...action,
-                    options: { ...(action.options || {}), color, _colorPicked: true },
-                });
-            });
-            return;
-        }
-        if (action.zone === 'discard') {
-            const effect = card.data.effect || (card.data.type === CARD_TYPES.RENT ? 'collect_rent' : null);
-            const isCharge = effect === 'collect_rent' || effect === 'birthday' || effect === 'debt_collector';
-            if (isCharge) {
-                // Charging actions go through proposeAction so targets can choose
-                // what to pay, play Just Say No, or surrender all assets.
-                // actionsLeft is decremented inside resolvePendingAction once settled.
-                proposeAction(card, gameState.localPlayerId, action.targetPlayerId, action.options || {});
-                Multiplayer.broadcastAction(action, gameState.localPlayerId);
-                update();
-                scheduleReactionHandling();
-                return;
-            }
-            executeAction(card, gameState.localPlayerId, action.targetPlayerId, action.options || {});
-        } else {
-            playCardToZone(card, action.zone, gameState.localPlayerId, action.options || {});
-            gameState.actionsLeft--;
-        }
-        Multiplayer.broadcastAction(action, gameState.localPlayerId);
-        update();
     }
 }
 
@@ -1299,56 +813,14 @@ function showPaymentPicker(owed) {
             return;
         }
         if (e.target.closest('[data-pay-submit]')) {
-            try {
-                const sum = items.reduce((s, it, i) => s + (selected.has(i) ? it.value : 0), 0);
-                if (sum < target) return;
-                console.log(`[NET-DEBUG] Payment submit: total=${sum}, target=${target}`);
-                const paidCardIds = Array.from(selected).map(i => items[i].card.data.id);
-                if (isSoloControllerActive() || activeNetGame) {
-                    modal.classList.add('hidden');
-                    modal.onclick = null;
-                    modal.removeAttribute('data-modal-kind');
-                    if (activeNetGame) submitNetAction({ type: 'concede', paidCardIds });
-                    else submitSoloAction({ type: 'concede', paidCardIds });
-                    return;
-                }
-                const attacker = gameState.players[attackerId];
-                for (const i of selected) {
-                    const it = items[i];
-                    if (it.kind === 'bank') {
-                        local.bank = local.bank.filter(c => c !== it.card);
-                        it.card.owner = attackerId;
-                        attacker.bank.push(it.card);
-                    } else if (it.kind === 'building') {
-                        local.buildings[it.colorKey] = (local.buildings[it.colorKey] || []).filter(c => c !== it.card);
-                        it.card.owner = attackerId;
-                        it.card.zone = 'bank';
-                        attacker.bank.push(it.card);
-                    } else {
-                        local.properties[it.colorKey] = (local.properties[it.colorKey] || []).filter(c => c !== it.card);
-                        it.card.owner = attackerId;
-                        const color = it.card.currentColor || it.colorKey;
-                        if (!attacker.properties[color]) attacker.properties[color] = [];
-                        attacker.properties[color].push(it.card);
-                    }
-                }
-                modal.classList.add('hidden');
-                modal.onclick = null;
-                modal.removeAttribute('data-modal-kind');
-                
-                if (!pa.options) pa.options = {};
-                if (!pa.options.alreadyPaidIds) pa.options.alreadyPaidIds = [];
-                if (!pa.options.alreadyPaidIds.includes(gameState.localPlayerId)) pa.options.alreadyPaidIds.push(gameState.localPlayerId);
-
-                console.log(`[NET-DEBUG] Resolving local concede with alreadyPaidIds=${pa.options.alreadyPaidIds}`);
-                resolvePendingAction(gameState.localPlayerId);
-                console.log(`[NET-DEBUG] Broadcasting concede to peers...`);
-                Multiplayer.broadcastAction({ type: 'concede', paidCardIds }, gameState.localPlayerId);
-                update();
-                scheduleReactionHandling();
-            } catch (err) {
-                console.error(`[NET-DEBUG] CRASH in payment submit:`, err);
-            }
+            const sum = items.reduce((s, it, i) => s + (selected.has(i) ? it.value : 0), 0);
+            if (sum < target) return;
+            const paidCardIds = Array.from(selected).map(i => items[i].card.data.id);
+            modal.classList.add('hidden');
+            modal.onclick = null;
+            modal.removeAttribute('data-modal-kind');
+            if (activeNetGame) submitNetAction({ type: 'concede', paidCardIds });
+            else submitSoloAction({ type: 'concede', paidCardIds });
         }
     };
     rerender();
@@ -1370,44 +842,6 @@ function onEndTurn() {
     }
     if (isSoloControllerActive()) {
         submitSoloAction({ type: 'end-turn' });
-        return;
-    }
-    if (gameState.turn !== gameState.localPlayerId) return;
-    const ok = engineEndTurn();
-    Multiplayer.broadcastAction({ type: 'end-turn' }, gameState.localPlayerId);
-    if (Multiplayer.isHost) broadcastSnapshot();
-    update();
-    if (ok) scheduleBotIfNeeded();
-}
-
-function scheduleBotIfNeeded() {
-    if (activeNetGame) return;    // the server drives bots in net games
-    if (isSoloControllerActive()) {
-        activeLocalGame.advance();
-        syncGameStateFromController();
-        update();
-        scheduleReactionHandling();
-        return;
-    }
-    if (gameState._gameOver || gameState._isStressTest) return;
-    if (gameState.pendingAction !== null) {
-        scheduleReactionHandling();
-        return;
-    }
-    if (gameState.turn === gameState.localPlayerId) return;
-    if (Multiplayer.isClient) return;
-    if (Multiplayer.isHost) {
-        const turnPlayer = gameState.players[gameState.turn];
-        if (turnPlayer && !turnPlayer._disconnected && !turnPlayer._isBot) return;
-    }
-    setTimeout(playBotTurn, 600);
-}
-
-function broadcastSnapshot() {
-    if (!Multiplayer.isHost) return;
-    const snap = JSON.parse(JSON.stringify(gameState));
-    for (const [peerId, pid] of peerToPlayer) {
-        Multiplayer.sendSnapshot({ playerId: pid, state: snap }, peerId);
     }
 }
 
@@ -1430,7 +864,7 @@ function scheduleReactionHandling() {
             payModal.dataset.modalKind === 'payment') {
             return;
         }
-        if (playerHasPendingReaction(gameState.localPlayerId)) showReactionPrompt();
+        if (playerHasPendingReactionS(gameState, gameState.localPlayerId)) showReactionPrompt();
         return;
     }
     if (isSoloControllerActive()) {
@@ -1441,139 +875,17 @@ function scheduleReactionHandling() {
         if (modal && !modal.classList.contains('hidden') && modal.dataset.modalKind === 'payment') {
             return;
         }
-        if (playerHasPendingReaction(gameState.localPlayerId)) {
+        if (playerHasPendingReactionS(gameState, gameState.localPlayerId)) {
             showReactionPrompt();
             return;
         }
         activeLocalGame.advance();
         syncGameStateFromController();
-        if (gameState.pendingAction !== null && playerHasPendingReaction(gameState.localPlayerId)) {
+        if (gameState.pendingAction !== null && playerHasPendingReactionS(gameState, gameState.localPlayerId)) {
             showReactionPrompt();
         }
         update();
-        return;
     }
-    if (gameState._gameOver) return;
-    if (gameState.pendingAction === null) {
-        scheduleBotIfNeeded();
-        return;
-    }
-    
-    const modal = document.getElementById('info-modal');
-    if (modal && !modal.classList.contains('hidden') && modal.dataset.modalKind === 'payment') {
-        return;
-    }
-
-    if (playerHasPendingReaction(gameState.localPlayerId)) {
-        showReactionPrompt();
-        return;
-    }
-    const pa = gameState.pendingAction;
-    const actors = new Set();
-    Object.keys(pa.chains).forEach(rid => {
-        const c = pa.chains[rid];
-        if (c.settled) return;
-        const actorId = (c.chainCount % 2 === 0) ? Number(rid) : pa.attackerId;
-        if (actorId !== gameState.localPlayerId) actors.add(actorId);
-    });
-    if (actors.size === 0) return;
-    actors.forEach(actorId => {
-        setTimeout(() => botReactFor(actorId), 500);
-    });
-}
-
-function showBotBanner(playerId, text) {
-    const p = gameState.players[playerId];
-    const banner = document.getElementById('turn-banner');
-    if (!banner) return;
-    banner.textContent = `${p.name}: "${text}"`;
-    banner.style.opacity = 1;
-    setTimeout(() => {
-        if (banner.textContent.startsWith(p.name)) banner.style.opacity = 0;
-    }, 2000);
-}
-
-function botReactFor(actorId) {
-    if (isSoloControllerActive()) {
-        activeLocalGame.advance();
-        syncGameStateFromController();
-        update();
-        scheduleReactionHandling();
-        return;
-    }
-    if (gameState._gameOver) return;
-    if (Multiplayer.isClient) return;
-    if (!gameState.pendingAction) return;
-    if (actorId === gameState.localPlayerId) return;
-    const p = gameState.players[actorId];
-    if (Multiplayer.isHost) {
-        if (p && !p._disconnected && !p._isBot) return;
-    }
-    if (!playerHasPendingReaction(actorId)) return;
-    
-    const difficulty = p._difficulty || 'normal';
-    const pa = gameState.pendingAction;
-    const isAttacker = actorId === pa.attackerId;
-    const bigDeal = pa.card.data.effect === 'deal_breaker' || pa.card.data.effect === 'sly_deal' || pa.card.data.effect === 'forced_deal';
-    const noCard = p.hand.find(c => c.data.effect === 'just_say_no');
-
-    let shouldJSN = false;
-    if (noCard) {
-        if (difficulty === 'easy') {
-            shouldJSN = Math.random() < 0.2;
-        } else if (difficulty === 'normal') {
-            shouldJSN = bigDeal;
-        } else if (difficulty === 'hard') {
-            // Hard: JSN big deals, or anything if we're close to winning/losing
-            shouldJSN = bigDeal;
-            if (!shouldJSN) {
-                const mySets = Object.values(p.properties).filter(arr => {
-                    const color = arr[0]?.currentColor || arr[0]?.data.colorKey;
-                    return color && arr.length >= (PROPERTIES[color]?.count || 3);
-                }).length;
-                if (mySets >= 2) shouldJSN = true; // Protect our almost-win
-            }
-        }
-    }
-
-    if (isAttacker) {
-        // Attacker JSN-back: only chain back if strategic
-        if (shouldJSN) {
-            const chainKey = Object.keys(pa.chains)
-                .map(k => Number(k))
-                .find(rid => !pa.chains[rid].settled && pa.chains[rid].chainCount % 2 === 1);
-            if (chainKey !== undefined) {
-                reactJustSayNo(noCard, actorId, chainKey);
-                update();
-                scheduleReactionHandling();
-                return;
-            }
-        }
-        resolvePendingAction(actorId);
-        update();
-        scheduleReactionHandling();
-        return;
-    }
-
-    if (shouldJSN) {
-        const lines = difficulty === 'hard' ? 
-            ['Not in my kingdom!', 'I think not.', 'Nice try, but no.', 'Denied!'] :
-            ['Just Say No!', 'Not today.', 'I decline.'];
-        showBotBanner(actorId, lines[Math.floor(Math.random()*lines.length)]);
-        
-        reactJustSayNo(noCard, actorId);
-        update();
-        scheduleReactionHandling();
-        return;
-    }
-    resolvePendingAction(actorId);
-    update();
-    scheduleReactionHandling();
-}
-
-// Back-compat shim for the window.__game.botReact handle.
-function botReact() {
-    scheduleReactionHandling();
 }
 
 /**
@@ -1724,19 +1036,6 @@ function resolveProposeOptions(action) {
     return opts;
 }
 
-const botStrategies = new Map();
-
-function pickStrategyAction(playerId) {
-    const fn = botStrategies.get(playerId);
-    if (!fn) return null;
-    try {
-        const actions = legalActionsFor(playerId);
-        return fn(actions, gameState, playerId) || null;
-    } catch (_e) {
-        return null;
-    }
-}
-
 function pickBestAction(playerId, state = gameState, actions = null) {
     const player = state.players[playerId];
     const difficulty = player._difficulty || 'normal';
@@ -1822,213 +1121,7 @@ function browserBotPolicy(state, playerId, legalActions) {
         return pickBestAction(playerId, state, legalActions);
     }
 
-    const strategy = botStrategies.get(playerId);
-    if (strategy) {
-        try {
-            const chosen = strategy(legalActions, state, playerId);
-            if (chosen) return chosen;
-        } catch (_e) {
-            // Ignore custom strategy failures and fall back to built-in scoring.
-        }
-    }
-
     return pickBestAction(playerId, state, legalActions);
-}
-
-function playBotTurn() {
-    if (activeNetGame) return;    // the server drives bots in net games
-    if (isSoloControllerActive()) {
-        activeLocalGame.advance();
-        syncGameStateFromController();
-        update();
-        scheduleReactionHandling();
-        return;
-    }
-    if (gameState._gameOver || gameState._isStressTest) return;
-    if (Multiplayer.isClient) return;
-    if (gameState.pendingAction !== null) {
-        scheduleReactionHandling();
-        return;
-    }
-    const botId = gameState.turn;
-    if (botId === gameState.localPlayerId) return;
-    // In MP: host only auto-plays disconnected seats; live peers self-drive.
-    if (Multiplayer.isHost) {
-        const turnPlayer = gameState.players[botId];
-        if (turnPlayer && !turnPlayer._disconnected && !turnPlayer._isBot) return;
-        // Disconnected human seat: just auto-end the turn (no actions).
-        if (turnPlayer && turnPlayer._disconnected && !turnPlayer._isBot) {
-            engineEndTurn();
-            Multiplayer.broadcastAction({ type: 'end-turn' }, botId);
-            broadcastSnapshot();
-            update();
-            scheduleBotIfNeeded();
-            return;
-        }
-    }
-
-    if (gameState.actionsLeft > 0) {
-        const pick = botStrategies.has(botId) ? pickStrategyAction(botId) : pickBestAction(botId);
-        if (pick) {
-            const card = findHandCard(botId, pick.cardId);
-            if (card) {
-                const effect = card.data.effect;
-                const difficulty = gameState.players[botId]._difficulty || 'normal';
-                if (effect === 'deal_breaker') showBotBanner(botId, difficulty === 'hard' ? 'I claim this land as my own!' : 'That set looks better in my kingdom.');
-                else if (effect === 'sly_deal') showBotBanner(botId, 'I will take that, thank you.');
-                else if (effect === 'debt_collector') showBotBanner(botId, 'Treasury is looking low. Pay up!');
-            }
-
-            if (pick.type === 'play') {
-                const card = findHandCard(botId, pick.cardId);
-                if (card) {
-                    if (pick.zone === 'discard') {
-                        const effect = card.data.effect || (card.data.type === CARD_TYPES.RENT ? 'collect_rent' : null);
-                        const isCharge = effect === 'collect_rent' || effect === 'birthday' || effect === 'debt_collector';
-                        if (isCharge) {
-                            // Route charging effects through proposeAction so human players
-                            // get the interactive picker. actionsLeft decrements on resolve.
-                            proposeAction(card, botId, pick.targetPlayerId, pick.options || {});
-                            Multiplayer.broadcastAction(pick, botId);
-                            update();
-                            scheduleReactionHandling();
-                            return;
-                        }
-                        executeAction(card, botId, pick.targetPlayerId, pick.options || {});
-                    } else {
-                        playCardToZone(card, pick.zone, botId, pick.options || {});
-                        gameState.actionsLeft--;
-                    }
-                    console.log(`[NET-DEBUG] Bot actionsLeft after: ${gameState.actionsLeft}`);
-                    Multiplayer.broadcastAction(pick, botId);
-                }
-            } else if (pick.type === 'propose') {
-                const card = findHandCard(botId, pick.cardId);
-                if (card) {
-                    const opts = resolveProposeOptions(pick);
-                    proposeAction(card, botId, pick.targetPlayerId, opts);
-                    Multiplayer.broadcastAction(pick, botId);
-                }
-            }
-            update();
-            setTimeout(playBotTurn, 800);
-            return;
-        }
-    }
-
-    engineEndTurn();
-    Multiplayer.broadcastAction({ type: 'end-turn' }, botId);
-    broadcastSnapshot();
-    update();
-    scheduleBotIfNeeded();
-}
-
-function applyRemoteAction(action, playerId) {
-    if (typeof playerId !== 'number') return;
-
-    const postActionSync = () => {
-        if (Multiplayer.isHost) broadcastSnapshot();
-        update();
-        scheduleReactionHandling();
-    };
-
-    if (action.type === 'react-no') {
-        const card = gameState.players[playerId].hand.find(c => c.data.id === action.cardId);
-        if (!card) return;
-        const againstReactorId = (action.againstReactorId !== undefined) ? action.againstReactorId : null;
-        reactJustSayNo(card, playerId, againstReactorId);
-        postActionSync();
-        return;
-    }
-    if (action.type === 'concede') {
-        console.log(`[HOST-DEBUG] applyRemoteAction(concede) for playerId=${playerId}`);
-        try {
-            const pa = gameState.pendingAction;
-            if (pa) {
-                if (!pa.options) pa.options = {};
-                if (!pa.options.alreadyPaidIds) pa.options.alreadyPaidIds = [];
-                if (!pa.options.alreadyPaidIds.includes(playerId)) pa.options.alreadyPaidIds.push(playerId);
-
-                if (action.paidCardIds && action.paidCardIds.length > 0) {
-                    const payer = gameState.players[playerId];
-                    const payee = gameState.players[pa.attackerId];
-                    const paidIds = new Set(action.paidCardIds);
-                    payer.bank.filter(c => paidIds.has(c.data.id)).forEach(c => {
-                        payer.bank = payer.bank.filter(x => x !== c);
-                        c.owner = pa.attackerId;
-                        payee.bank.push(c);
-                    });
-                    for (const colorKey of Object.keys(payer.properties || {})) {
-                        (payer.properties[colorKey] || []).filter(c => paidIds.has(c.data.id)).forEach(c => {
-                            payer.properties[colorKey] = payer.properties[colorKey].filter(x => x !== c);
-                            c.owner = pa.attackerId;
-                            const color = c.currentColor || colorKey;
-                            if (!payee.properties[color]) payee.properties[color] = [];
-                            payee.properties[color].push(c);
-                        });
-                    }
-                    for (const colorKey of Object.keys(payer.buildings || {})) {
-                        (payer.buildings[colorKey] || []).filter(c => paidIds.has(c.data.id)).forEach(c => {
-                            payer.buildings[colorKey] = payer.buildings[colorKey].filter(x => x !== c);
-                            c.owner = pa.attackerId;
-                            c.zone = 'bank';
-                            payee.bank.push(c);
-                        });
-                    }
-                }
-                resolvePendingAction(playerId);
-            }
-            postActionSync();
-        } catch (err) {
-            console.error(`[HOST-DEBUG] Error in concede processing:`, err);
-        }
-        return;
-    }
-    if (action.type === 'end-turn') {
-        engineEndTurn();
-        postActionSync();
-        scheduleBotIfNeeded();
-        return;
-    }
-    if (action.type === 'swap-wild') {
-        swapWildColor(playerId, action.cardId, action.color);
-        postActionSync();
-        return;
-    }
-
-    const card = findHandCard(playerId, action.cardId);
-    if (!card) return;
-
-    if (action.type === 'discard') {
-        const p = gameState.players[playerId];
-        p.hand = p.hand.filter(c => c !== card);
-        card.zone = 'deck';
-        card.owner = null;
-        gameState.deck.unshift(card);
-        if (gameState.mustDiscard > 0) gameState.mustDiscard--;
-        postActionSync();
-        return;
-    }
-    if (action.type === 'propose') {
-        proposeAction(card, playerId, action.targetPlayerId, action.options || {});
-        postActionSync();
-        return;
-    }
-    if (action.type === 'play') {
-        if (action.zone === 'discard') {
-            const effect = card.data.effect || (card.data.type === CARD_TYPES.RENT ? 'collect_rent' : null);
-            const isCharge = effect === 'collect_rent' || effect === 'birthday' || effect === 'debt_collector';
-            if (isCharge) {
-                proposeAction(card, playerId, action.targetPlayerId, action.options || {});
-            } else {
-                executeAction(card, playerId, action.targetPlayerId, action.options || {});
-            }
-        } else {
-            playCardToZone(card, action.zone, playerId, action.options || {});
-            gameState.actionsLeft--;
-        }
-        postActionSync();
-    }
 }
 
 function showBanner(text) {
@@ -2545,39 +1638,23 @@ function showGlossary() {
 
 init();
 
+// Step 8: window.__game is a read-only debug window. Every accessor returns a
+// clone or a computed value; there is no handle that can mutate live game
+// state (net games additionally have the __llNet e2e hook, same rules).
 if (typeof window !== 'undefined') {
-    window.__game = {
-        state: () => publicState(),
-        dispatch: dispatchAction,
-        endTurn: onEndTurn,
-        playBotTurn,
+    window.__game = Object.freeze({
+        state: () => publicState(),                         // withViewMeta clones
         enumerate: (pid) => legalActionsFor(pid),
         pickBest: (pid) => {
-            const state = activeLocalGame ? activeLocalGame.peek() : gameState;
+            const state = publicState();
             return pickBestPlayAction(legalActionsFor(pid, state), pid, state.players[pid]?._difficulty || 'normal', state);
         },
         pickBestAny: (pid) => {
-            const state = activeLocalGame ? activeLocalGame.peek() : gameState;
+            const state = publicState();
             return pickBestAction(pid, state, legalActionsFor(pid, state));
         },
-        botReact,
-        update,
-        checkWinner: () => activeLocalGame ? activeLocalGame.winner() : checkWinner(),
-        propose: (card, pid, tid, opts) => {
-            if (isSoloControllerActive()) {
-                if (pid === gameState.localPlayerId) {
-                    submitSoloAction({ type: 'propose', cardId: card.data.id, targetPlayerId: tid, options: opts || {} });
-                }
-                return;
-            }
-            proposeAction(card, pid, tid, opts);
-            update();
-            scheduleReactionHandling();
-        },
-        setBotStrategy: (pid, fn) => {
-            if (typeof fn === 'function') botStrategies.set(pid, fn);
-            else botStrategies.delete(pid);
-        },
-        clearBotStrategies: () => botStrategies.clear(),
-    };
+        checkWinner: () => (activeLocalGame ? activeLocalGame.winner()
+            : activeNetGame ? (activeNetGame.client.getState().winner ?? null)
+            : null),
+    });
 }

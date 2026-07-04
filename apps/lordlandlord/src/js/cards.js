@@ -100,15 +100,10 @@ export function generateDeck(packs = 1, rng = null) {
 
     for (let p = 0; p < packs; p++) buildOnePack();
 
-    // Shuffle (Fisher–Yates, now in core/deck.js). A seeded rng makes the
-    // order reproducible; without one we fall back to an unseeded shuffle.
-    if (rng) {
-        shuffleInPlace(deck, rng);
-    } else {
-        for (let i = deck.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [deck[i], deck[j]] = [deck[j], deck[i]];
-        }
-    }
+    // Shuffle (Fisher–Yates, in core/deck.js). Step 8: a seeded rng is
+    // required — the unseeded Math.random fallback is gone so every deck
+    // order is reproducible from its seed.
+    if (!rng) throw new Error('generateDeck: a seeded rng is required');
+    shuffleInPlace(deck, rng);
     return deck;
 }

@@ -61,10 +61,8 @@ async function main() {
 
     async function newPage(tag) {
         const context = await browser.newContext();
-        // Hermetic run: stub the external PeerJS CDN script (removed in Step 8)
-        // and Google Fonts so an offline box can't produce resource errors.
-        await context.route('https://unpkg.com/**', route =>
-            route.fulfill({ contentType: 'application/javascript', body: 'window.Peer = window.Peer || function(){};' }));
+        // Hermetic run: stub Google Fonts so an offline box can't produce
+        // resource errors.
         await context.route('https://fonts.googleapis.com/**', route =>
             route.fulfill({ contentType: 'text/css', body: '' }));
         await context.route('https://fonts.gstatic.com/**', route =>

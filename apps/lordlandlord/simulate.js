@@ -1,10 +1,27 @@
 import { generateDeck, CARD_TYPES, PROPERTIES } from './src/js/cards.js';
-import { 
-    gameState, initGameState, startTurn, endTurn, 
-    playCardToZone, executeAction, proposeAction, reactJustSayNo, 
-    resolvePendingAction, checkWinner, enumerateLegalActions,
-    calculateRent
+// Step 8: the engine singleton is gone — this sim owns its state object and
+// binds the old helper names to the state-first API.
+import {
+    initGameStateS, startTurnS, endTurnS,
+    playCardToZoneS, executeActionS, proposeActionS, reactJustSayNoS,
+    resolvePendingActionS, checkWinnerS, calculateRentS
 } from './src/js/engine.js';
+import { enumerateLegalActions as enumerateLegalActionsState } from './src/js/core/legal.js';
+import { createRng } from './src/js/core/rng.js';
+
+const gameState = {};
+const initGameState = (cards, playerCount = 2, seed = 1, rngState = null) =>
+    initGameStateS(gameState, cards, playerCount, seed, rngState);
+const startTurn = (pid) => startTurnS(gameState, pid);
+const endTurn = () => endTurnS(gameState);
+const playCardToZone = (card, zone, pid, options = {}) => playCardToZoneS(gameState, card, zone, pid, options);
+const executeAction = (card, pid, tid, options = {}) => executeActionS(gameState, card, pid, tid, options);
+const proposeAction = (card, pid, tid, options = {}) => proposeActionS(gameState, card, pid, tid, options);
+const reactJustSayNo = (noCard, pid, against = null) => reactJustSayNoS(gameState, noCard, pid, against);
+const resolvePendingAction = (concedingId = null) => resolvePendingActionS(gameState, concedingId);
+const checkWinner = () => checkWinnerS(gameState);
+const enumerateLegalActions = (pid) => enumerateLegalActionsState(gameState, pid);
+const calculateRent = (pid, color) => calculateRentS(gameState, pid, color);
 import fs from 'fs';
 
 const LOG_FILE = 'sim_logs.jsonl';
@@ -100,8 +117,8 @@ function otherId(id) { return id === 0 ? 1 : 0; }
 
 function runGame(gameId, strategies) {
     const playerCount = strategies.length;
-    const deck = generateDeck().map(data => ({ data, zone: 'deck', owner: null }));
-    initGameState(deck, playerCount);
+    const deck = generateDeck(1, createRng(1000 + gameId)).map(data => ({ data, zone: 'deck', owner: null }));
+    initGameState(deck, playerCount, 1000 + gameId);
     startTurn(0);
 
     let turns = 0;

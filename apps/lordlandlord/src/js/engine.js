@@ -13,30 +13,12 @@ import { shuffleInPlace } from './core/deck.js';
 //
 // The canonical rulebook lives in the `*S(state, ...)` functions below: each
 // takes the game state as its first argument and mutates only that object, so
-// the same function can drive the live singleton or a cloned state (which is
-// what the pure reducer in Step 4 needs). The legacy wrappers at the bottom of
-// the file keep the original names/signatures bound to the exported
-// `gameState` singleton, so existing callers (main.js) and tests are unchanged.
+// the same function can drive any state copy — the solo controller, the net
+// writer/client mirrors, or a cloned state inside the pure reducer (Step 4).
+// The pre-Step-8 gameState singleton and its legacy wrapper functions are
+// gone; every caller passes state explicitly. Legality enumeration lives in
+// core/legal.js.
 // ---------------------------------------------------------------------------
-
-export const gameState = {
-    // seed is the game's original seed (captured for replay); rngState is the
-    // live cursor into that stream. All randomness (deal + reshuffles) draws
-    // from here, so snapshots and replay reproduce deck order exactly.
-    seed: 0,
-    rngState: 0,
-    deck: [],
-    discard: [],
-    players: [],
-    turn: 0,
-    actionsLeft: 3,
-    mustDiscard: 0,
-    localPlayerId: 0,
-    reactionTargetId: null,
-    pendingReactors: [],
-    pendingAction: null,
-    doubleRentArmed: false
-};
 
 // Reaction model: pendingAction.chains maps each charged opponent id to
 // { chainCount, settled, canceled, nextActorId }. Fan-out actions open one
@@ -47,9 +29,13 @@ export const gameState = {
 // even chainCount, the attacker on odd).
 
 export function initGameStateS(state, cards, playerCount = 2, seed = null, rngState = null) {
-    // seed defaults to a fixed value so tests that don't pass one are still
-    // deterministic; the live game (main.js) always supplies a real seed.
-    state.seed = (seed == null ? 1 : seed) >>> 0;
+    // Step 8: the seed is required. Every deal and mid-game reshuffle draws
+    // from this stream; an implicit fallback here would silently produce
+    // states that replay/convergence checks cannot reproduce.
+    if (seed == null || !Number.isFinite(seed)) {
+        throw new Error('initGameStateS: an explicit numeric seed is required');
+    }
+    state.seed = seed >>> 0;
     // rngState is where the live rng cursor picks up — after the initial deal
     // shuffle the caller passes the advanced state so reshuffles continue the
     // same stream; otherwise we start the stream at the seed.
@@ -684,237 +670,4 @@ function pickPaymentSubset(cards, amount) {
         if (bestMask & (1 << i)) out.push(cards[i]);
     }
     return out;
-}
-
-export function enumerateLegalActionsS(state, playerId) {
-    const player = state.players[playerId];
-    const actions = [];
-
-    // If game over, no actions
-    if (checkWinnerS(state) !== null) return [];
-
-    // If must discard
-    if (state.mustDiscard > 0) {
-        if (state.turn === playerId) {
-            player.hand.forEach(card => {
-                actions.push({ type: 'discard', cardId: card.data.id });
-            });
-        }
-        return actions;
-    }
-
-    if (state.pendingAction !== null) {
-        if (playerHasPendingReactionS(state, playerId)) {
-            const pa = state.pendingAction;
-            const isAttacker = playerId === pa.attackerId;
-            const targetChainIds = isAttacker
-                ? Object.keys(pa.chains).map(k => Number(k))
-                    .filter(rid => !pa.chains[rid].settled && pa.chains[rid].chainCount % 2 === 1)
-                : [playerId];
-            player.hand.forEach(card => {
-                if (card.data.effect === 'just_say_no') {
-                    if (isAttacker) {
-                        targetChainIds.forEach(rid => {
-                            actions.push({ type: 'react-no', cardId: card.data.id, againstReactorId: rid });
-                        });
-                    } else {
-                        actions.push({ type: 'react-no', cardId: card.data.id });
-                    }
-                }
-            });
-            actions.push({ type: 'concede' });
-        }
-        return actions;
-    }
-
-    // Normal turn
-    if (state.turn !== playerId) return [];
-
-    // Free actions: property wildcards can move between legal colors on your
-    // turn without spending one of the three actions.
-    Object.keys(player.properties || {}).forEach(color => {
-        (player.properties[color] || []).forEach(card => {
-            if (card.data.type !== CARD_TYPES.JOKER) return;
-            const targetColors = card.data.isRainbow
-                ? Object.keys(PROPERTIES)
-                : (card.data.allowedColors || []);
-            targetColors.forEach(targetColor => {
-                if (targetColor !== color && PROPERTIES[targetColor]) {
-                    actions.push({ type: 'swap-wild', cardId: card.data.id, color: targetColor });
-                }
-            });
-        });
-    });
-
-    // 3 action limit
-    if (state.actionsLeft > 0) {
-        player.hand.forEach(card => {
-            // Bank: only Money / Rent / Action / Building per rulebook
-            // ("PUT MONEY/ACTION CARDS INTO YOUR OWN BANK").
-            // Property cards and Property Wildcards stay in the property collection.
-            if (card.data.type !== CARD_TYPES.PROPERTY && card.data.type !== CARD_TYPES.JOKER) {
-                actions.push({ type: 'play', cardId: card.data.id, zone: 'bank' });
-            }
-
-            // Play Property
-            if (card.data.type === CARD_TYPES.PROPERTY) {
-                actions.push({ type: 'play', cardId: card.data.id, zone: 'board', options: { color: card.data.colorKey } });
-            }
-
-            // Play Wild
-            if (card.data.type === CARD_TYPES.JOKER) {
-                card.data.allowedColors.forEach(color => {
-                    actions.push({ type: 'play', cardId: card.data.id, zone: 'board', options: { color } });
-                });
-            }
-
-            // Play Building
-            if (card.data.type === CARD_TYPES.BUILDING) {
-                Object.keys(player.properties).forEach(color => {
-                    if (player.properties[color].length >= PROPERTIES[color].count && color !== 'UTILITY' && color !== 'RAILROAD') {
-                        const existing = player.buildings[color] || [];
-                        if (existing.some(b => b.data.effect === card.data.effect)) return;
-                        // Hotel requires a House already on the set.
-                        if (card.data.effect === 'hotel' && !existing.some(b => b.data.effect === 'house')) return;
-                        actions.push({ type: 'play', cardId: card.data.id, zone: 'board', options: { color } });
-                    }
-                });
-            }
-
-            // Play Action
-            if (card.data.type === CARD_TYPES.ACTION) {
-                const opponentIds = state.players
-                    .filter(p => p.id !== playerId)
-                    .map(p => p.id);
-
-                if (card.data.effect === 'sly_deal' || card.data.effect === 'deal_breaker' || card.data.effect === 'forced_deal') {
-                    opponentIds.forEach(oppId => {
-                        const opp = state.players[oppId];
-                        Object.keys(opp.properties).forEach(color => {
-                            const isComplete = opp.properties[color].length >= PROPERTIES[color].count;
-                            if (card.data.effect === 'sly_deal' && !isComplete) {
-                                opp.properties[color].forEach(targetCard => {
-                                    actions.push({ type: 'propose', cardId: card.data.id, targetPlayerId: oppId, options: { targetCardId: targetCard.data.id, color } });
-                                });
-                            }
-                            if (card.data.effect === 'deal_breaker' && isComplete) {
-                                actions.push({ type: 'propose', cardId: card.data.id, targetPlayerId: oppId, options: { color } });
-                            }
-                            if (card.data.effect === 'forced_deal' && !isComplete) {
-                                opp.properties[color].forEach(targetCard => {
-                                    Object.keys(player.properties).forEach(myColor => {
-                                        const myComplete = player.properties[myColor].length >= PROPERTIES[myColor].count;
-                                        if (myComplete) return;
-                                        player.properties[myColor].forEach(myCard => {
-                                            actions.push({
-                                                type: 'propose',
-                                                cardId: card.data.id,
-                                                targetPlayerId: oppId,
-                                                options: {
-                                                    myCardId: myCard.data.id,
-                                                    targetCardId: targetCard.data.id,
-                                                    color
-                                                }
-                                            });
-                                        });
-                                    });
-                                });
-                            }
-                        });
-                    });
-                } else if (card.data.effect === 'double_rent') {
-                    if (state.actionsLeft >= 2 && player.hand.some(c => c.data.type === CARD_TYPES.RENT)) {
-                        actions.push({ type: 'play', cardId: card.data.id, zone: 'discard' });
-                    }
-                } else if (card.data.effect === 'pass_go') {
-                    // Pass Go targets nobody; no JSN possible. Auto-fire on play.
-                    actions.push({ type: 'play', cardId: card.data.id, zone: 'discard' });
-                } else if (card.data.effect === 'just_say_no') {
-                    // JSN is reactive-only; never offered during normal action selection.
-                } else {
-                    opponentIds.forEach(oppId => {
-                        actions.push({ type: 'propose', cardId: card.data.id, targetPlayerId: oppId });
-                    });
-                }
-            }
-
-            // Rent: single-color = fan-out (targetPlayerId null); multi = per-opponent (player picks one).
-            if (card.data.type === CARD_TYPES.RENT) {
-                const opponentIds = state.players
-                    .filter(p => p.id !== playerId)
-                    .map(p => p.id);
-                card.data.allowedColors.forEach(color => {
-                    if (player.properties[color] && player.properties[color].length > 0) {
-                        if (card.data.isMulti) {
-                            opponentIds.forEach(oppId => {
-                                actions.push({ type: 'propose', cardId: card.data.id, targetPlayerId: oppId, options: { color } });
-                            });
-                        } else {
-                            actions.push({ type: 'propose', cardId: card.data.id, targetPlayerId: null, options: { color } });
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    // End Turn
-    actions.push({ type: 'end-turn' });
-
-    return actions;
-}
-
-// ---------------------------------------------------------------------------
-// Legacy wrappers — original names/signatures bound to the exported gameState
-// singleton. Kept so main.js and the existing test suite work unchanged while
-// the codebase migrates to the state-first API above. Removed in Step 8.
-// ---------------------------------------------------------------------------
-
-export function initGameState(cards, playerCount = 2, seed = null, rngState = null) {
-    return initGameStateS(gameState, cards, playerCount, seed, rngState);
-}
-export function startTurn(playerId) {
-    return startTurnS(gameState, playerId);
-}
-export function endTurn() {
-    return endTurnS(gameState);
-}
-export function calculateRent(playerId, color) {
-    return calculateRentS(gameState, playerId, color);
-}
-export function drawCardFromDeck(playerId) {
-    return drawCardFromDeckS(gameState, playerId);
-}
-export function getCompletedSets(playerId) {
-    return getCompletedSetsS(gameState, playerId);
-}
-export function checkWinner() {
-    return checkWinnerS(gameState);
-}
-export function playCardToZone(card, targetZoneStr, playerId, options = {}) {
-    return playCardToZoneS(gameState, card, targetZoneStr, playerId, options);
-}
-export function swapWildColor(playerId, cardId, newColor) {
-    return swapWildColorS(gameState, playerId, cardId, newColor);
-}
-export function proposeAction(card, playerId, targetPlayerId, options = {}) {
-    return proposeActionS(gameState, card, playerId, targetPlayerId, options);
-}
-export function playerHasPendingReaction(playerId) {
-    return playerHasPendingReactionS(gameState, playerId);
-}
-export function reactJustSayNo(noCard, reactingPlayerId, againstReactorId = null) {
-    return reactJustSayNoS(gameState, noCard, reactingPlayerId, againstReactorId);
-}
-export function resolvePendingAction(concedingPlayerId = null) {
-    return resolvePendingActionS(gameState, concedingPlayerId);
-}
-export function executeAction(card, playerId, targetPlayerId, options = {}) {
-    return executeActionS(gameState, card, playerId, targetPlayerId, options);
-}
-export function chargePlayer(payerId, payeeId, amount) {
-    return chargePlayerS(gameState, payerId, payeeId, amount);
-}
-export function enumerateLegalActions(playerId) {
-    return enumerateLegalActionsS(gameState, playerId);
 }

@@ -59,8 +59,6 @@ async function main() {
 
     async function newPage(tag) {
         const context = await browser.newContext();
-        await context.route('https://unpkg.com/**', route =>
-            route.fulfill({ contentType: 'application/javascript', body: 'window.Peer = window.Peer || function(){};' }));
         await context.route('https://fonts.googleapis.com/**', route =>
             route.fulfill({ contentType: 'text/css', body: '' }));
         await context.route('https://fonts.gstatic.com/**', route =>

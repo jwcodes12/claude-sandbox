@@ -1,21 +1,43 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+// Step 8: the engine's gameState singleton and legacy wrappers are gone.
+// This suite owns its own state object and binds the old helper names to the
+// state-first API, so the test bodies below stay byte-for-byte identical.
 import {
-    gameState,
-    initGameState,
-    startTurn,
-    endTurn,
-    calculateRent,
-    drawCardFromDeck,
-    playCardToZone,
-    executeAction,
-    enumerateLegalActions,
-    chargePlayer,
-    proposeAction,
-    reactJustSayNo,
-    resolvePendingAction,
-    playerHasPendingReaction,
-    checkWinner
+    initGameStateS,
+    startTurnS,
+    endTurnS,
+    calculateRentS,
+    drawCardFromDeckS,
+    playCardToZoneS,
+    executeActionS,
+    chargePlayerS,
+    proposeActionS,
+    reactJustSayNoS,
+    resolvePendingActionS,
+    playerHasPendingReactionS,
+    checkWinnerS,
+    swapWildColorS
 } from '../src/js/engine.js';
+import { enumerateLegalActions as enumerateLegalActionsState } from '../src/js/core/legal.js';
+
+const gameState = {};
+const initGameState = (cards, playerCount = 2, seed = 1, rngState = null) =>
+    initGameStateS(gameState, cards, playerCount, seed, rngState);
+const startTurn = (pid) => startTurnS(gameState, pid);
+const endTurn = () => endTurnS(gameState);
+const calculateRent = (pid, color) => calculateRentS(gameState, pid, color);
+const drawCardFromDeck = (pid) => drawCardFromDeckS(gameState, pid);
+const playCardToZone = (card, zone, pid, options = {}) => playCardToZoneS(gameState, card, zone, pid, options);
+const executeAction = (card, pid, tid, options = {}) => executeActionS(gameState, card, pid, tid, options);
+const enumerateLegalActions = (pid) => enumerateLegalActionsState(gameState, pid);
+const chargePlayer = (payer, payee, amount) => chargePlayerS(gameState, payer, payee, amount);
+const proposeAction = (card, pid, tid, options = {}) => proposeActionS(gameState, card, pid, tid, options);
+const reactJustSayNo = (noCard, pid, against = null) => reactJustSayNoS(gameState, noCard, pid, against);
+const resolvePendingAction = (concedingId = null) => resolvePendingActionS(gameState, concedingId);
+const playerHasPendingReaction = (pid) => playerHasPendingReactionS(gameState, pid);
+const checkWinner = () => checkWinnerS(gameState);
+const swapWildColor = (pid, cardId, color) => swapWildColorS(gameState, pid, cardId, color);
+void checkWinner; void swapWildColor;
 import { CARD_TYPES, PROPERTIES } from '../src/js/cards.js';
 
 let __idc = 0;

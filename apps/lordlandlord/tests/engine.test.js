@@ -1,21 +1,45 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+// Step 8: the engine's gameState singleton and legacy wrappers are gone.
+// This suite owns its own state object and binds the old helper names to the
+// state-first API, so the test bodies below stay byte-for-byte identical.
 import {
-    gameState,
-    initGameState,
-    startTurn,
-    endTurn,
-    calculateRent,
-    drawCardFromDeck,
-    playCardToZone,
-    executeAction,
-    enumerateLegalActions,
-    chargePlayer,
-    proposeAction,
-    reactJustSayNo,
-    resolvePendingAction,
-    playerHasPendingReaction
+    initGameStateS,
+    startTurnS,
+    endTurnS,
+    calculateRentS,
+    drawCardFromDeckS,
+    playCardToZoneS,
+    executeActionS,
+    chargePlayerS,
+    proposeActionS,
+    reactJustSayNoS,
+    resolvePendingActionS,
+    playerHasPendingReactionS,
+    checkWinnerS,
+    swapWildColorS
 } from '../src/js/engine.js';
+import { enumerateLegalActions as enumerateLegalActionsState } from '../src/js/core/legal.js';
+
+const gameState = {};
+const initGameState = (cards, playerCount = 2, seed = 1, rngState = null) =>
+    initGameStateS(gameState, cards, playerCount, seed, rngState);
+const startTurn = (pid) => startTurnS(gameState, pid);
+const endTurn = () => endTurnS(gameState);
+const calculateRent = (pid, color) => calculateRentS(gameState, pid, color);
+const drawCardFromDeck = (pid) => drawCardFromDeckS(gameState, pid);
+const playCardToZone = (card, zone, pid, options = {}) => playCardToZoneS(gameState, card, zone, pid, options);
+const executeAction = (card, pid, tid, options = {}) => executeActionS(gameState, card, pid, tid, options);
+const enumerateLegalActions = (pid) => enumerateLegalActionsState(gameState, pid);
+const chargePlayer = (payer, payee, amount) => chargePlayerS(gameState, payer, payee, amount);
+const proposeAction = (card, pid, tid, options = {}) => proposeActionS(gameState, card, pid, tid, options);
+const reactJustSayNo = (noCard, pid, against = null) => reactJustSayNoS(gameState, noCard, pid, against);
+const resolvePendingAction = (concedingId = null) => resolvePendingActionS(gameState, concedingId);
+const playerHasPendingReaction = (pid) => playerHasPendingReactionS(gameState, pid);
+const checkWinner = () => checkWinnerS(gameState);
+const swapWildColor = (pid, cardId, color) => swapWildColorS(gameState, pid, cardId, color);
+void checkWinner; void swapWildColor;
 import { CARD_TYPES } from '../src/js/cards.js';
+import { createRng } from '../src/js/core/rng.js';
 
 function card(type, extra = {}, id = 'c_' + Math.random().toString(36).slice(2, 8)) {
     return { data: { id, type, name: 'X', value: 1, ...extra }, zone: 'hand', owner: 0 };
@@ -289,7 +313,6 @@ describe('swapWildColor (rulebook: wilds move freely on own turn)', () => {
     }
 
     it('swaps a dual-color wild between its allowed colors', async () => {
-        const { swapWildColor } = await import('../src/js/engine.js');
         const wild = placeWild(0, 'BROWN', ['BROWN', 'LIGHTBLUE']);
         gameState.turn = 0;
         const ok = swapWildColor(0, wild.data.id, 'LIGHTBLUE');
@@ -300,7 +323,6 @@ describe('swapWildColor (rulebook: wilds move freely on own turn)', () => {
     });
 
     it('rejects swapping to a color not in allowedColors (dual wild)', async () => {
-        const { swapWildColor } = await import('../src/js/engine.js');
         const wild = placeWild(0, 'BROWN', ['BROWN', 'LIGHTBLUE']);
         gameState.turn = 0;
         const ok = swapWildColor(0, wild.data.id, 'GREEN');
@@ -309,7 +331,6 @@ describe('swapWildColor (rulebook: wilds move freely on own turn)', () => {
     });
 
     it('allows a rainbow wild to swap to any valid property color', async () => {
-        const { swapWildColor } = await import('../src/js/engine.js');
         const wild = placeWild(0, 'BROWN', [], { isRainbow: true, value: 0 });
         gameState.turn = 0;
         const ok = swapWildColor(0, wild.data.id, 'GREEN');
@@ -318,7 +339,6 @@ describe('swapWildColor (rulebook: wilds move freely on own turn)', () => {
     });
 
     it('rejects swap when it is not your turn', async () => {
-        const { swapWildColor } = await import('../src/js/engine.js');
         const wild = placeWild(0, 'BROWN', ['BROWN', 'LIGHTBLUE']);
         gameState.turn = 1; // opponent's turn
         const ok = swapWildColor(0, wild.data.id, 'LIGHTBLUE');
@@ -326,7 +346,6 @@ describe('swapWildColor (rulebook: wilds move freely on own turn)', () => {
     });
 
     it('rejects swap of a wild that belongs to someone else', async () => {
-        const { swapWildColor } = await import('../src/js/engine.js');
         const wild = placeWild(1, 'BROWN', ['BROWN', 'LIGHTBLUE']);
         gameState.turn = 0;
         const ok = swapWildColor(0, wild.data.id, 'LIGHTBLUE');
@@ -336,7 +355,6 @@ describe('swapWildColor (rulebook: wilds move freely on own turn)', () => {
     });
 
     it('rejects swap during a pending reaction', async () => {
-        const { swapWildColor } = await import('../src/js/engine.js');
         const wild = placeWild(0, 'BROWN', ['BROWN', 'LIGHTBLUE']);
         gameState.turn = 0;
         gameState.reactionTargetId = 1;
@@ -348,7 +366,7 @@ describe('swapWildColor (rulebook: wilds move freely on own turn)', () => {
 describe('two-pack deck for 6+ players (rulebook)', () => {
     it('single-pack deck has 106 playable cards with unique IDs', async () => {
         const { generateDeck } = await import('../src/js/cards.js');
-        const deck = generateDeck(1);
+        const deck = generateDeck(1, createRng(1));
         expect(deck.length).toBe(106);
         const ids = new Set(deck.map(c => c.id));
         expect(ids.size).toBe(deck.length);
@@ -356,7 +374,7 @@ describe('two-pack deck for 6+ players (rulebook)', () => {
 
     it('two-pack deck has 212 cards with unique IDs across both packs', async () => {
         const { generateDeck } = await import('../src/js/cards.js');
-        const deck = generateDeck(2);
+        const deck = generateDeck(2, createRng(1));
         expect(deck.length).toBe(212);
         const ids = new Set(deck.map(c => c.id));
         expect(ids.size).toBe(deck.length);
@@ -364,7 +382,7 @@ describe('two-pack deck for 6+ players (rulebook)', () => {
 
     it('two-pack deck doubles every card template (e.g. 4 Deal Breakers, 20 Pass Go)', async () => {
         const { generateDeck } = await import('../src/js/cards.js');
-        const deck = generateDeck(2);
+        const deck = generateDeck(2, createRng(1));
         const dealBreakers = deck.filter(c => c.effect === 'deal_breaker').length;
         const passGo = deck.filter(c => c.effect === 'pass_go').length;
         const rainbowWilds = deck.filter(c => c.isRainbow).length;
@@ -375,7 +393,7 @@ describe('two-pack deck for 6+ players (rulebook)', () => {
 
     it('initializes a 6-player game from a two-pack deck and deals 5 cards each', async () => {
         const { generateDeck } = await import('../src/js/cards.js');
-        const rawDeck = generateDeck(2);
+        const rawDeck = generateDeck(2, createRng(1));
         const entities = rawDeck.map(c => ({ data: c, zone: 'deck', owner: null }));
         initGameState([...entities], 6);
         for (let i = 0; i < 6; i++) {
