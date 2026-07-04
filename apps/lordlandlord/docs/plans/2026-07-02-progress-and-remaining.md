@@ -106,22 +106,36 @@ done, not polish. Stakes are low — the process holds ephemeral game state only
 Kill switch: `tailscale funnel off`. (Free managed hosts rejected: they sleep on idle, which
 *is* the stall bug we're eliminating.)
 
+### Step 6b — Real transport: WebSocket server + browser adapter *(done; GitHub #11, monorepo working tree)*
+The writer/client/protocol stayed untouched (verified: `git diff` clean on `net/{protocol,writer,client,transport,testing}.js` and `core/**`); this was a transport swap plus lobby, exactly as planned.
+- `server/index.js`: Node `ws` process, one `net/writer.js` per room behind a fixed wire contract
+  (control frames on key `t`: `create`/`join`/`rejoin`/`add-bot`/`start`/`leave`; game frames
+  forwarded verbatim on key `type`; `clientId = 'c'+seat`). **All hardening landed:** crypto room
+  ids + 16-byte seat tokens, connection↔seat binding (spoofed `playerId`/`seat` rejected before
+  the writer), JSON-parse guard, 16KB `maxPayload`, per-connection token-bucket rate limit,
+  `maxRooms`/`maxConns` caps, heartbeat + dead-socket terminate, empty-room reaping. Bots run
+  server-side. Only dep: `ws`.
+- `src/js/net/ws-transport.js`: browser channel adapter (`createWsSession`) with lobby API,
+  outbox queue, and auto-reconnect (0.5s→8s backoff) → `rejoin` → `Resume` via `onRejoined`.
+- `main.js`: third authority path `activeNetGame` beside solo; splash/lobby DOM rewired to the
+  WS session (`?room=` share links, `?ws=`/`window.LL_WS_URL` override); PeerJS left in place but
+  unwired (deleted at Step 8). `window.__llNet` test hook drives e2e.
+- `src/js/net/ws-testing.js` + `tests/net-ws/` (6 suites, 12 tests): failure-mode intent ported to
+  the real loopback server — full-flow convergence, idempotent duplicate frames, socket-destroy
+  rejoin + snapshot adoption, stale/behind clients, **seat-binding rejection (new hardening
+  suite)**, skipped-turn. Artificial reorder/drop stays fake-hub-only (TCP is ordered).
+- `tests/server/` (9 tests): lobby/token auth, spoofing, oversized frame (1009), rate limit
+  (1008), `maxRooms`, real-socket mini game with hash convergence, rejoin + `reconnect()`.
+- Deploy: `ops/systemd/lordlandlord.service` (hardened, `DynamicUser=yes`) + `server/README.md`
+  with Tailscale Funnel steps. Not yet enabled on the box.
+- **Verified (2026-07-04):** `npx vitest run` → **219/219** (22 files; 198 baseline + 21 new);
+  `npm run test:e2e` → two-browser Playwright game to a winner in 82 driver steps, hash
+  convergence, zero page/console errors; `node tests/e2e/solo-smoke.mjs` → solo board renders,
+  zero errors; `node server/index.js` boot check binds 18181.
+
 ---
 
 ## Part 2 — Remaining work
-
-### Step 6b — Real transport: WebSocket server + browser adapter *(next; GitHub #11)*
-The writer/client/protocol are proven; this is a transport swap, not new logic.
-- `server/`: tiny Node `ws` process hosting `net/writer.js` per room. **Hardening in scope:**
-  unguessable room ids, connection↔seat binding, JSON parse in try/catch, frame-size limit,
-  per-connection rate limit, max rooms/connections, idle socket reaping, minimal deps.
-- Browser adapter implementing the same channel interface as the fake hub, over `wss://`, with
-  auto-reconnect → `Resume`.
-- Lobby flow: create room → share link/code → seats claimed → server starts game (replaces the
-  PeerJS host-relay path; `multiplayer.js` retired at Step 8).
-- Deploy: hardened systemd unit (`ops/` pattern) + `tailscale funnel` on the chosen port.
-- **Verify:** the same failure-mode suites run against a real server on localhost (loopback ws),
-  plus a two-browser Playwright session completing a game.
 
 ### Step 7 — Reconnect & resume (browser-side polish)
 Mostly proven at the net layer (client `reconnect()`, writer rebuild from Accepted log). Remaining

@@ -3,6 +3,8 @@ import { createRng } from './core/rng.js';
 import { createInitialState, clone } from './core/state.js';
 import { enumerateLegalActions as enumerateLegalActionsForState } from './core/legal.js';
 import { createLocalGame } from './app/local-game.js';
+import { createClient } from './net/client.js';
+import { createWsSession } from './net/ws-transport.js';
 import {
     gameState,
     initGameState,
@@ -37,6 +39,12 @@ let playerToPeer = new Map(); // Reverse map for migration
 let peerNames = new Map();
 let hostName = '';
 let activeLocalGame = null;
+// Third authority path (Step 6b): a WebSocket game against the real server
+// writer. When set, ALL intents flow through client.submit and the local
+// gameState is only ever a mirror of accepted state.
+let activeNetGame = null;     // { session, client, seat } | null
+let netSession = null;        // lazy singleton createWsSession
+let netInfo = null;           // { roomId, seat, seatToken } from the last 'joined'
 let viewMeta = {
     localPlayerId: 0,
     logOpen: false,
@@ -68,63 +76,275 @@ function syncGameStateFromController() {
     return gameState;
 }
 
+// Net mirror: overwrite the legacy global gameState with the net client's
+// authoritative state + view metadata, exactly like syncGameStateFromController
+// does for solo, so the render/input/engine-global paths keep working.
+function syncGameStateFromNet() {
+    if (!activeNetGame) return gameState;
+    const view = withViewMeta(activeNetGame.client.getState());
+    for (const key of Object.keys(gameState)) delete gameState[key];
+    Object.assign(gameState, view);
+    return gameState;
+}
+
 function currentState() {
+    if (activeNetGame) return syncGameStateFromNet();
     return activeLocalGame ? syncGameStateFromController() : gameState;
 }
 
 function publicState() {
+    if (activeNetGame) return withViewMeta(activeNetGame.client.getState());
     return activeLocalGame ? withViewMeta(activeLocalGame.getState()) : gameState;
 }
 
 function legalActionsFor(playerId, state = null) {
+    if (activeNetGame) return enumerateLegalActionsForState(state || activeNetGame.client.getState(), playerId);
     if (activeLocalGame) return enumerateLegalActionsForState(state || activeLocalGame.peek(), playerId);
     return enumerateLegalActions(playerId);
 }
 
 function init() {
-    Multiplayer.init((id) => {
-        document.getElementById('lobby-id-display').textContent = id;
-    });
-
-    Multiplayer.onRemoteAction = applyRemoteAction;
-    Multiplayer.onSnapshot = handleSnapshot;
-    Multiplayer.onPeerJoined = handlePeerJoined;
-    Multiplayer.onPeerLeft = handlePeerLeft;
-    Multiplayer.onLobbyUpdate = updateLobbyUI;
-    Multiplayer.onHostLost = handleHostLost;
-    Multiplayer.onRejected = (reason) => {
-        flashHint(reason || 'Rejected by host.');
-        setTimeout(() => location.reload(), 1500);
-    };
-    Multiplayer.onPeerError = (msg) => {
-        flashHint(msg);
-    };
+    // Multiplayer (PeerJS) is no longer wired up here — the lobby now runs on
+    // the WebSocket game server (net/ws-transport.js). multiplayer.js itself
+    // is removed in Step 8.
 
     injectSoloButton();
 
     document.getElementById('btn-copy-id').onclick = () => {
-        if (Multiplayer.peerId) navigator.clipboard.writeText(Multiplayer.peerId);
+        if (netInfo) navigator.clipboard.writeText(netShareLink(netInfo.roomId));
     };
 
-    document.getElementById('btn-create-game').onclick = onHostGame;
-    document.getElementById('btn-join-game').onclick = onJoinGame;
+    document.getElementById('btn-create-game').onclick = onCreateRealm;
+    document.getElementById('btn-join-game').onclick = onJoinRealm;
     document.getElementById('btn-leave-lobby').onclick = leaveLobby;
-    document.getElementById('btn-start-game').onclick = startGameFromLobby;
+    document.getElementById('btn-start-game').onclick = () => {
+        if (netSession && netInfo && netInfo.seat === 0) netSession.start();
+    };
     document.getElementById('btn-close-modal').onclick = closeModal;
 
     const addBotBtn = document.getElementById('btn-add-bot');
     if (addBotBtn) {
-        // Show button in MP lobby to let host add bots
         addBotBtn.style.display = '';
-        addBotBtn.onclick = () => {
-            if (lobbyPeers.length + lobbyBots.length >= 4) {
-                flashHint('Lobby is full!');
-                return;
-            }
-            lobbyBots.push({ id: `bot_${Date.now()}_${Math.floor(Math.random()*1000)}`, difficulty: 'normal' });
-            updateLobbyUI();
-        };
+        addBotBtn.onclick = () => { if (netSession) netSession.addBot(); };
     }
+
+    // Share-link entry: ?room=<id> prefills the join form so the invitee only
+    // types a name and marches forth.
+    const roomParam = new URLSearchParams(location.search).get('room');
+    if (roomParam) {
+        const joinInput = document.getElementById('join-game-id');
+        if (joinInput) joinInput.value = roomParam;
+        const nameInput = document.getElementById('player-name-join');
+        if (nameInput) nameInput.focus();
+    }
+}
+
+// ---- WebSocket lobby / game wiring (Step 6b) -------------------------------
+
+function wsUrl() {
+    const qs = new URLSearchParams(location.search);
+    return qs.get('ws')
+        || (typeof window !== 'undefined' && window.LL_WS_URL)
+        || `ws://${location.hostname}:18181`;
+}
+
+function netShareLink(roomId) {
+    return `${location.origin}${location.pathname}?room=${encodeURIComponent(roomId)}`;
+}
+
+function ensureNetSession() {
+    if (netSession) return netSession;
+    netSession = createWsSession({ url: wsUrl() });
+    netSession.onJoined(handleNetJoined);
+    netSession.onRoom(renderNetLobby);
+    netSession.onStarted(handleNetStarted);
+    netSession.onRejoined(() => {
+        // Post-start rebind: ask the writer for a catch-up snapshot.
+        if (activeNetGame) activeNetGame.client.reconnect();
+    });
+    netSession.onError((err) => {
+        flashHint(err.message || err.code || 'Realm error.');
+    });
+    netSession.onStatus((s) => {
+        if (s === 'reconnecting') flashHint('Connection lost — reconnecting…');
+        else if (s === 'open' && activeNetGame) flashHint('Reconnected to the realm.');
+    });
+    return netSession;
+}
+
+function onCreateRealm() {
+    activeLocalGame = null;
+    const name = (document.getElementById('player-name-create')?.value || '').trim() || 'Host';
+    ensureNetSession().create(name);
+}
+
+function onJoinRealm() {
+    activeLocalGame = null;
+    const code = (document.getElementById('join-game-id')?.value || '').trim();
+    if (!code) {
+        flashHint('Enter the Realm ID to join.');
+        return;
+    }
+    const name = (document.getElementById('player-name-join')?.value || '').trim() || `Lord ${Date.now() % 100}`;
+    ensureNetSession().join(code, name);
+}
+
+function handleNetJoined(msg) {
+    netInfo = { roomId: msg.roomId, seat: msg.seat, seatToken: msg.seatToken };
+    if (activeNetGame) {
+        // Mid-game rejoin confirmation; onRejoined handles the snapshot pull.
+        activeNetGame.seat = msg.seat;
+        return;
+    }
+    document.getElementById('splash-container').classList.add('hidden');
+    document.getElementById('lobby-container').classList.remove('hidden');
+    document.getElementById('lobby-id-display').textContent = msg.roomId;
+    const passLine = document.getElementById('lobby-pass-display');
+    if (passLine) passLine.textContent = netShareLink(msg.roomId);
+    const startBtn = document.getElementById('btn-start-game');
+    if (msg.seat === 0) {
+        startBtn.textContent = 'START REIGN';
+        startBtn.disabled = true;   // enabled once a second seat appears
+    } else {
+        startBtn.textContent = 'Awaiting host…';
+        startBtn.disabled = true;
+    }
+    const addBotBtn = document.getElementById('btn-add-bot');
+    if (addBotBtn) addBotBtn.style.display = msg.seat === 0 ? '' : 'none';
+    renderNetLobby(msg.players || []);
+}
+
+// Lobby roster from {t:'room'} broadcasts (replaces the PeerJS updateLobbyUI).
+function renderNetLobby(players) {
+    const slots = document.getElementById('lobby-slots');
+    if (!slots || activeNetGame) return;
+    const mySeat = netInfo ? netInfo.seat : null;
+    slots.innerHTML = '';
+    const maxSlots = Math.max(5, players.length);
+    for (let i = 0; i < maxSlots; i++) {
+        const slot = document.createElement('div');
+        const p = players.find(pl => pl.seat === i);
+        if (p) {
+            slot.className = 'lobby-slot';
+            const nameEl = document.createElement('span');
+            nameEl.textContent = p.isBot
+                ? `🤖 ${p.name}`
+                : (p.seat === mySeat ? `${p.name} (You)` : p.name);
+            const statusEl = document.createElement('span');
+            statusEl.className = 'status';
+            statusEl.textContent = p.isBot ? 'Ready' : (p.connected ? 'Joined' : 'Away');
+            slot.append(nameEl, statusEl);
+        } else {
+            slot.className = 'lobby-slot empty';
+            slot.innerHTML = '<span>Empty Slot</span>';
+        }
+        slots.appendChild(slot);
+    }
+    if (mySeat === 0) {
+        const startBtn = document.getElementById('btn-start-game');
+        startBtn.disabled = players.length < 2;
+        startBtn.textContent = `START REIGN (${players.length})`;
+    }
+}
+
+function handleNetStarted(msg) {
+    if (!netInfo || activeNetGame) return;
+    const seat = netInfo.seat;
+    activeLocalGame = null;
+
+    // Byte-identical v0 state from the exact descriptors the server used.
+    const initial = createInitialState(msg.seed, msg.players);
+    const channel = netSession.channel();
+    const client = createClient({ seat, channel, state: initial });
+    channel.afterMessage(() => {
+        if (!activeNetGame) return;
+        syncGameStateFromNet();
+        update();
+        scheduleReactionHandling();
+    });
+
+    viewMeta = {
+        localPlayerId: seat,
+        logOpen: false,
+        isStressTest: !!window.__game_stress_test,
+        actionLog: [],
+    };
+    lastShownResolutionKey = null;
+    lastShownWinnerId = null;
+    activeNetGame = { session: netSession, client, seat };
+
+    document.getElementById('splash-container').classList.add('hidden');
+    document.getElementById('lobby-container').classList.add('hidden');
+    document.getElementById('game-container').classList.remove('hidden');
+
+    ensureInputAttached();
+    exposeNetTestHook();
+    syncGameStateFromNet();
+    update();
+}
+
+function submitNetAction(action) {
+    if (!activeNetGame || !action) return false;
+    syncGameStateFromNet();
+
+    // Concede with a real debt and enough assets → interactive payment picker
+    // (same flow as solo; the picked cards travel in paidCardIds).
+    if (action.type === 'concede' && !Array.isArray(action.paidCardIds)) {
+        const owed = debtOwedByLocal();
+        if (owed > 0) {
+            const local = gameState.players[gameState.localPlayerId];
+            if (totalPayableAssets(local) >= owed) {
+                showPaymentPicker(owed);
+                return false;
+            }
+        }
+    }
+
+    activeNetGame.client.submit(action);
+    if (action.type === 'react-no' || action.type === 'concede') hideModal();
+    return true;
+}
+
+// One auto end-turn per accepted version, so an update() storm can't spam the
+// writer while the previous end-turn is still in flight.
+let _netAutoEndVersion = -1;
+function maybeAutoEndNetTurn() {
+    if (!activeNetGame) return;
+    if (gameState._gameOver || gameState.winner != null) return;
+    if (gameState.turn !== gameState.localPlayerId) return;
+    if (gameState.actionsLeft > 0 || gameState.pendingAction !== null || gameState.mustDiscard > 0) return;
+    const v = gameState.version || 0;
+    if (v === _netAutoEndVersion) return;
+    _netAutoEndVersion = v;
+    activeNetGame.client.submit({ type: 'end-turn' });
+}
+
+// E2E driver hook: read-only clones + submit for THIS page's seat only.
+function exposeNetTestHook() {
+    if (typeof window === 'undefined' || !activeNetGame) return;
+    const g = activeNetGame;
+    window.__llNet = {
+        seat: g.seat,
+        getState: () => g.client.getState(),                       // already a clone
+        submit: (a) => g.client.submit(a),
+        legal: () => enumerateLegalActionsForState(g.client.getState(), g.seat),
+        version: () => g.client.getVersion(),
+        hash: () => g.client.hashOf(),
+        // Same brain the solo bots use, run against the net client's state:
+        // returns this seat's preferred action (or null → caller falls back).
+        chooseAuto: () => {
+            const st = g.client.getState();
+            const legal = enumerateLegalActionsForState(st, g.seat);
+            let a = null;
+            try { a = browserBotPolicy(st, g.seat, legal); } catch (_e) { a = null; }
+            if (!a) {
+                if (st.pendingAction) a = legal.find(x => x.type === 'concede') || null;
+                else if (st.mustDiscard > 0) a = legal.find(x => x.type === 'discard') || null;
+                else a = legal.find(x => x.type === 'end-turn') || null;
+            }
+            return a || null;
+        }
+    };
 }
 
 function injectSoloButton() {
@@ -142,6 +362,7 @@ function injectSoloButton() {
 }
 
 function onSoloGame() {
+    activeNetGame = null;
     document.getElementById('splash-container').classList.add('hidden');
     document.getElementById('game-container').classList.remove('hidden');
     startLocalGame(3);
@@ -324,10 +545,11 @@ function updateLobbyUI() {
 }
 
 function leaveLobby() {
+    if (netSession) netSession.leave();
     document.getElementById('lobby-container').classList.add('hidden');
     document.getElementById('splash-container').classList.remove('hidden');
     lobbyPeers = [];
-    // Hard reset: easiest way to drop MP state is a reload.
+    // Hard reset: easiest way to drop session state is a reload.
     setTimeout(() => location.reload(), 50);
 }
 
@@ -440,9 +662,10 @@ function ensureInputAttached() {
         if (e.target.closest('[data-action="end-turn"]')) onEndTurn();
         if (e.target.closest('[data-action="menu"]')) showGlossary();
         if (e.target.closest('[data-action="toggle-log"]')) {
-            if (isSoloControllerActive()) {
+            if (isSoloControllerActive() || activeNetGame) {
                 viewMeta.logOpen = !viewMeta.logOpen;
-                syncGameStateFromController();
+                if (activeNetGame) syncGameStateFromNet();
+                else syncGameStateFromController();
             } else {
                 gameState._logOpen = !gameState._logOpen;
             }
@@ -526,7 +749,8 @@ function appendLog(text) {
 }
 
 function update() {
-    if (activeLocalGame) syncGameStateFromController();
+    if (activeNetGame) syncGameStateFromNet();
+    else if (activeLocalGame) syncGameStateFromController();
     scheduleRender();
 
     if (gameState.lastResolution) {
@@ -537,16 +761,22 @@ function update() {
             appendLog(msg);
         }
         lastShownResolutionKey = key;
-        if (!activeLocalGame) gameState.lastResolution = null;
+        if (!activeLocalGame && !activeNetGame) gameState.lastResolution = null;
     }
 
-    const winnerId = activeLocalGame ? activeLocalGame.winner() : checkWinner();
+    const winnerId = activeNetGame
+        ? (gameState.winner ?? null)
+        : activeLocalGame ? activeLocalGame.winner() : checkWinner();
     if (winnerId !== null && winnerId !== lastShownWinnerId) {
         lastShownWinnerId = winnerId;
         gameState._gameOver = true;
         showBanner(winnerId === gameState.localPlayerId ? 'THE CROWN IS YOURS!' : 'YOUR KINGDOM HAS FALLEN');
     }
 
+    if (activeNetGame) {
+        maybeAutoEndNetTurn();
+        return;
+    }
     if (activeLocalGame) return;
 
     if (
@@ -612,6 +842,10 @@ function dispatchAction(action) {
     if (!action) return;
     if (action.type === 'tap-via-drop') {
         handleCardTap(action.cardId);
+        return;
+    }
+    if (activeNetGame) {
+        submitNetAction(action);
         return;
     }
     if (isSoloControllerActive()) {
@@ -931,11 +1165,12 @@ function showPaymentPicker(owed) {
                 if (sum < target) return;
                 console.log(`[NET-DEBUG] Payment submit: total=${sum}, target=${target}`);
                 const paidCardIds = Array.from(selected).map(i => items[i].card.data.id);
-                if (isSoloControllerActive()) {
+                if (isSoloControllerActive() || activeNetGame) {
                     modal.classList.add('hidden');
                     modal.onclick = null;
                     modal.removeAttribute('data-modal-kind');
-                    submitSoloAction({ type: 'concede', paidCardIds });
+                    if (activeNetGame) submitNetAction({ type: 'concede', paidCardIds });
+                    else submitSoloAction({ type: 'concede', paidCardIds });
                     return;
                 }
                 const attacker = gameState.players[attackerId];
@@ -990,6 +1225,10 @@ function showWildColorPicker(card, allowedColors, onPick) {
 }
 
 function onEndTurn() {
+    if (activeNetGame) {
+        submitNetAction({ type: 'end-turn' });
+        return;
+    }
     if (isSoloControllerActive()) {
         submitSoloAction({ type: 'end-turn' });
         return;
@@ -1003,6 +1242,7 @@ function onEndTurn() {
 }
 
 function scheduleBotIfNeeded() {
+    if (activeNetGame) return;    // the server drives bots in net games
     if (isSoloControllerActive()) {
         activeLocalGame.advance();
         syncGameStateFromController();
@@ -1033,6 +1273,27 @@ function broadcastSnapshot() {
 }
 
 function scheduleReactionHandling() {
+    if (activeNetGame) {
+        syncGameStateFromNet();
+        if (gameState._gameOver) return;
+        if (gameState.pendingAction === null) {
+            // A remote resolution can settle the chain while our reaction
+            // prompt is still up — drop it.
+            const openModal = document.getElementById('info-modal');
+            if (openModal && !openModal.classList.contains('hidden') &&
+                openModal.dataset.modalKind === 'reaction') {
+                hideModal();
+            }
+            return;
+        }
+        const payModal = document.getElementById('info-modal');
+        if (payModal && !payModal.classList.contains('hidden') &&
+            payModal.dataset.modalKind === 'payment') {
+            return;
+        }
+        if (playerHasPendingReaction(gameState.localPlayerId)) showReactionPrompt();
+        return;
+    }
     if (isSoloControllerActive()) {
         syncGameStateFromController();
         if (gameState._gameOver) return;
@@ -1436,6 +1697,7 @@ function browserBotPolicy(state, playerId, legalActions) {
 }
 
 function playBotTurn() {
+    if (activeNetGame) return;    // the server drives bots in net games
     if (isSoloControllerActive()) {
         activeLocalGame.advance();
         syncGameStateFromController();

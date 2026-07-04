@@ -5,12 +5,15 @@
   "description": "Medieval Monopoly Deal Engine",
   "scripts": {
     "dev": "node serve.js",
+    "serve:ws": "node server/index.js",
     "test": "vitest run",
+    "test:e2e": "node tests/e2e/two-browser-game.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
     "express": "^5.2.1",
-    "playwright": "^1.60.0"
+    "playwright": "^1.60.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "jsdom": "^24.0.0",
