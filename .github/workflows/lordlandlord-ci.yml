@@ -1,0 +1,73 @@
+name: lordlandlord CI
+
+# Guards Lord Landlord multiplayer from silently breaking between play sessions.
+# Runs the deterministic suite (engine + net + WS-server) and the real browser
+# e2e (two-browser game, refresh/reconnect/tab-displacement, chaos soak, and the
+# Mac soak in self-hosted local mode) on every change to the app. Red = don't
+# ship it to friends yet.
+
+on:
+  push:
+    paths:
+      - 'apps/lordlandlord/**'
+      - '.github/workflows/lordlandlord-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/lordlandlord/**'
+      - '.github/workflows/lordlandlord-ci.yml'
+
+# A newer push to the same branch cancels the older run (saves Actions minutes).
+concurrency:
+  group: lordlandlord-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/lordlandlord
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/lordlandlord/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('apps/lordlandlord/package-lock.json') }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      # ── Deterministic suite: engine rules, net reducer, WS server hardening ──
+      - name: Unit + net + WS-server tests
+        run: npm test
+
+      # ── Browser e2e over the real stack (each spins up its own server) ──
+      - name: e2e — solo smoke
+        run: node tests/e2e/solo-smoke.mjs
+
+      - name: e2e — two-browser game to a winner
+        run: node tests/e2e/two-browser-game.mjs
+
+      - name: e2e — refresh / reconnect / tab-displacement
+        run: node tests/e2e/refresh-resume.mjs
+
+      - name: e2e — chaos soak (latency proxies + disruptions)
+        run: node tests/e2e/chaos-game.mjs
+
+      - name: e2e — soak (join/reconnect/dup-tab/simultaneous, self-hosted)
+        run: node tests/e2e/soak-mac.mjs
+        env:
+          PLAYERS: '4'
+          ROUNDS: '4'
