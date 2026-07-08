@@ -38,7 +38,11 @@ jobs:
           cache-dependency-path: apps/lordlandlord/package-lock.json
 
       - name: Install deps
-        run: npm ci
+        # The app has its own standalone lockfile but sits inside a workspace
+        # root (monorepo package.json has workspaces:[apps/*]). Running npm here
+        # would otherwise switch into parent-workspace mode and fail; --no-
+        # workspaces forces the standalone install the app is designed for.
+        run: npm install --no-workspaces --no-audit --no-fund
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
