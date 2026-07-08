@@ -38,18 +38,27 @@
 //   LL_DEVICE   playwright device name       (default 'iPhone 14', with LL_MOBILE)
 //   LL_ENGINE   'chromium' | 'webkit'        (override engine without mobile profile)
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium, webkit, devices } from 'playwright';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const APP_ROOT = path.join(__dirname, '..', '..');
+
 // ── config ────────────────────────────────────────────────────────────────────
-const TARGET  = process.env.LL_TARGET || 'http://100.82.110.116:18180';
-const HOST    = new URL(TARGET).hostname;
-const WS      = process.env.LL_WS || `ws://${HOST}:18181`;
+// Target resolution:
+//   LL_TARGET set  → drive an EXTERNAL stack (e.g. the box over Tailscale).
+//   LL_TARGET unset → spin up a LOCAL stack in-process (self-contained; this is
+//                     what CI uses — no box required).
+const EXTERNAL = !!process.env.LL_TARGET;
+let TARGET  = process.env.LL_TARGET || null;         // resolved in main() when local
+let WS      = process.env.LL_WS || null;
+let PAGE_URL = null;
 const PLAYERS = Math.min(5, Math.max(2, Number(process.env.PLAYERS || 3)));
 const ROUNDS  = Number(process.env.ROUNDS || 2);
 const STEP    = Number(process.env.STEP_TURNS || 6);
 const HEADED  = process.env.HEADED === '1';
 const VERBOSE = process.env.VERBOSE === '1';
-const PAGE_URL = `${TARGET}/?ws=${encodeURIComponent(WS)}`;
 // Mobile approximation: LL_MOBILE=1 drives the WebKit engine (Safari's family)
 // with an iPhone device descriptor — mobile viewport, isMobile, hasTouch, iOS
 // Safari UA. Closest a headless run gets to an iPhone; it still submits actions
@@ -122,17 +131,53 @@ async function waitFor(fn, timeoutMs, what) {
     }
 }
 
+// Spin up the app's own static server + WS game server in-process, so the soak
+// is fully self-contained (CI, or the Mac without the box). Mirrors the setup
+// refresh-resume.mjs uses. Returns a close() that tears both down.
+async function startLocalStack() {
+    const express = (await import('express')).default;
+    const { createGameServer } = await import('../../server/index.js');
+    const app = express();
+    app.get('/favicon.ico', (_req, res) => res.status(204).end());
+    app.use(express.static(path.join(APP_ROOT, 'src')));
+    const httpServer = await new Promise((resolve) => {
+        const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    const httpPort = httpServer.address().port;
+    const gameServer = await createGameServer({ port: 0 });
+    return {
+        target: `http://127.0.0.1:${httpPort}`,
+        ws: `ws://127.0.0.1:${gameServer.port}`,
+        close: async () => {
+            await gameServer.close().catch(() => {});
+            await new Promise(r => httpServer.close(r));
+        },
+    };
+}
+
 // ── main ───────────────────────────────────────────────────────────────────────
 async function main() {
+    // Resolve the target: external (box) or a fresh in-process local stack.
+    let localStack = null;
+    if (EXTERNAL) {
+        WS = WS || `ws://${new URL(TARGET).hostname}:18181`;
+    } else {
+        localStack = await startLocalStack();
+        TARGET = localStack.target;
+        WS = localStack.ws;
+    }
+    PAGE_URL = `${TARGET}/?ws=${encodeURIComponent(WS)}`;
+
     banner(`SOAK: ${PLAYERS} clients → ${TARGET}  (ws ${WS})`);
-    line('SETUP', `engine=${MOBILE ? `webkit/${DEVICE} (mobile)` : ENGINE.name()}  page ${PAGE_URL}`);
+    line('SETUP', `engine=${MOBILE ? `webkit/${DEVICE} (mobile)` : ENGINE.name()}  mode=${EXTERNAL ? 'external' : 'local'}  page ${PAGE_URL}`);
 
     // reachability preflight so we fail fast with a clear message
     try {
         const res = await fetch(TARGET, { method: 'GET' });
         line('SETUP', `static site reachable: HTTP ${res.status}`);
     } catch (e) {
-        console.error(`\nCannot reach ${TARGET} — is the box stack up? (${e.message})`);
+        console.error(`\nCannot reach ${TARGET}${EXTERNAL ? ' — is the box stack up?' : ''} (${e.message})`);
+        if (localStack) await localStack.close();
         process.exit(2);
     }
 
@@ -167,6 +212,9 @@ async function main() {
             // artifact of the test, not a defect — don't count it as a violation.
             if (/ERR_INTERNET_DISCONNECTED/.test(t) ||
                 (/WebSocket connection to/.test(t) && /failed/.test(t))) return;
+            // Static-asset load failures (e.g. a missing card image) are out of
+            // scope for a sync/reconnect soak — a dedicated asset test owns those.
+            if (/Failed to load resource/.test(t)) return;
             errors[tag].push(`console.error: ${t.slice(0, 200)}`);
         });
         await page.goto(PAGE_URL, { waitUntil: 'domcontentloaded' });
@@ -295,6 +343,7 @@ async function main() {
     check(errTotal === 0, `no page/console errors across ${Object.keys(errors).length} clients`);
 
     await browser.close();
+    if (localStack) await localStack.close();
     banner(FAILS === 0 ? 'SOAK PASS — all scenarios converged, no errors'
                        : `SOAK FAIL — ${FAILS} oracle violation(s)`);
     process.exit(FAILS === 0 ? 0 : 1);
