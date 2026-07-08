@@ -1,9 +1,10 @@
 // Throwaway solo smoke: static server + chromium, click solo, assert board renders, no errors.
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { chromium } from 'playwright';
 
-const APP_ROOT = '/home/opc/claude-sandbox/apps/lordlandlord';
+const APP_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const app = express();
 app.get('/favicon.ico', (_req, res) => res.status(204).end());
