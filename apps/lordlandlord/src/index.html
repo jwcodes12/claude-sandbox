@@ -67,6 +67,17 @@
         </div>
     </div>
 
+    <!-- When served over public HTTPS (e.g. Tailscale Funnel fronts the static
+         site on :443 and the WS server on :8443), a page loaded over https can't
+         open an insecure ws://, so point the client at wss://host:8443. Local
+         http play is untouched: LL_WS_URL stays unset and wsUrl() falls back to
+         ws://host:18181. An explicit ?ws= still overrides both. -->
+    <script>
+        if (location.protocol === 'https:' && !new URLSearchParams(location.search).get('ws')) {
+            window.LL_WS_URL = `wss://${location.hostname}:8443`;
+        }
+    </script>
+
     <!-- Modules (cache-busted during dev so module-registry doesn't pin a stale build) -->
     <script type="module">
         await import(`./js/main.js?v=${Date.now()}`);
