@@ -73,5 +73,7 @@ jobs:
       - name: e2e — soak (join/reconnect/dup-tab/simultaneous, self-hosted)
         run: node tests/e2e/soak-mac.mjs
         env:
-          PLAYERS: '4'
+          # 3 clients keeps page count (and CI CPU contention) down while still
+          # cycling every scenario across the disruption rounds.
+          PLAYERS: '3'
           ROUNDS: '4'

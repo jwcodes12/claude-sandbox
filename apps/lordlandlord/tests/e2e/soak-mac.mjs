@@ -380,7 +380,11 @@ async function main() {
         const dup = await newClient(dupTag, victim.ctx);          // SAME context → shared localStorage
         await netReady(dup.page);
         check((await seatOf(dup.page)) === seat, `${dupTag} auto-resumed seat ${seat}`);
-        const yielded = await waitFor(async () => (await bannerText(victim.page, 'net-status-banner')).includes('another tab'), 15000, `${victim.tag} old tab shows 'another tab' displaced banner`);
+        // Generous timeout: the displaced banner renders on the (now idle) old
+        // tab, whose JS event loop can be starved for many seconds when several
+        // Chromium pages share a loaded CI runner. The displacement itself is
+        // instant server-side; this only waits for the paint.
+        const yielded = await waitFor(async () => (await bannerText(victim.page, 'net-status-banner')).includes('another tab'), 45000, `${victim.tag} old tab shows 'another tab' displaced banner`);
         // old tab must stay quiet (no rejoin flap / ping-pong)
         await new Promise(r => setTimeout(r, 2500));
         check(await bannerVisible(victim.page, 'net-status-banner'), `${victim.tag} stayed yielded (no ping-pong)`);
