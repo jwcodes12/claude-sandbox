@@ -3,7 +3,7 @@ import { createInitialState, clone } from './core/state.js';
 import { enumerateLegalActions as enumerateLegalActionsForState } from './core/legal.js';
 import { playerHasPendingReactionS } from './engine.js';
 import { createLocalGame } from './app/local-game.js';
-import { createClient } from './net/client.js';
+import { createClient, makeIdSource } from './net/client.js';
 import { createWsSession } from './net/ws-transport.js';
 import { render } from './render.js';
 import { attachInput } from './input.js';
@@ -359,7 +359,14 @@ function handleNetStarted(msg) {
     // Byte-identical v0 state from the exact descriptors the server used.
     const initial = createInitialState(msg.seed, msg.players);
     const channel = netSession.channel();
-    const client = createClient({ seat, channel, state: initial });
+    // Intent ids must stay unique ACROSS page reloads: the default
+    // makeIdSource('c'+seat) restarts at #0, and the writer's idempotency set
+    // still holds the pre-reload ids — fresh submits would be swallowed as
+    // duplicates until the counter passed its old high-water mark. Salting the
+    // tag with per-pageload entropy fixes that (ids are opaque; clientId stays
+    // 'c'+seat for snapshot routing). App layer may use Math.random; core not.
+    const idTag = `c${seat}-${Math.random().toString(36).slice(2, 8)}`;
+    const client = createClient({ seat, channel, state: initial, idSource: makeIdSource(idTag) });
     channel.afterMessage(() => {
         if (!activeNetGame) return;
         syncGameStateFromNet();
