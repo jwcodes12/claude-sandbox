@@ -36,17 +36,25 @@ sudo -u $U sqlite3 /home/studio/data/studio.sqlite \
   "INSERT OR IGNORE INTO model_stats(role,model,output_type) VALUES
    ('builder','claude','any'),('code-critic','claude','any');"
 
-echo "== env file placeholder =="
-echo "== studio claude auth =="
-# studio runs the CLIs itself (system-wide /usr/bin/claude); it just needs its
-# own credentials. Reuse opc's account rather than a separate setup-token flow.
+echo "== AI CLI auth for studio =="
+# claude: uses system-wide /usr/bin/claude with a dedicated long-lived token in
+#   /home/studio/.config/studio/env (CLAUDE_CODE_OAUTH_TOKEN). Copying opc's
+#   ~/.claude/.credentials.json is UNSTABLE (shared OAuth refresh-token rotates),
+#   so DON'T — run `claude setup-token` and put the token in that env file.
 install -d -o $U -g $U -m 700 /home/studio/.claude
-if [ ! -f /home/studio/.claude/.credentials.json ] && [ -f /home/opc/.claude/.credentials.json ]; then
-  install -o $U -g $U -m 600 /home/opc/.claude/.credentials.json /home/studio/.claude/.credentials.json
-  install -o $U -g $U -m 644 /home/opc/.claude/settings.json /home/studio/.claude/settings.json 2>/dev/null || true
-  echo "  copied opc claude credentials to studio"
-else
-  echo "  studio credentials already present"
+install -o $U -g $U -m 644 /home/opc/.claude/settings.json /home/studio/.claude/settings.json 2>/dev/null || true
+grep -q CLAUDE_CODE_OAUTH_TOKEN /home/studio/.config/studio/env 2>/dev/null \
+  || echo "  NOTE: add CLAUDE_CODE_OAUTH_TOKEN to /home/studio/.config/studio/env (claude setup-token)"
+# gemini: no CLI (deprecated) — studio uses the Gemini HTTP API via GEMINI_API_KEY
+grep -q GEMINI_API_KEY /home/studio/.config/studio/env 2>/dev/null \
+  || echo "  NOTE: add GEMINI_API_KEY to /home/studio/.config/studio/env"
+# agy (multi-model gateway) + codex: install binaries system-wide so studio can run them
+[ -f /home/opc/.local/bin/agy ] && install -m 755 /home/opc/.local/bin/agy /usr/local/bin/agy || true
+if [ -f /home/opc/.local/bin/codex ]; then
+  install -m 755 "$(readlink -f /home/opc/.local/bin/codex)" /usr/local/bin/codex
+  install -d -o $U -g $U -m 700 /home/studio/.codex
+  [ -f /home/studio/.codex/auth.json ] || install -o $U -g $U -m 600 /home/opc/.codex/auth.json /home/studio/.codex/auth.json 2>/dev/null || true
+  install -o $U -g $U -m 644 /home/opc/.codex/config.toml /home/studio/.codex/config.toml 2>/dev/null || true
 fi
 
 echo "== SELinux label for /srv/studio =="

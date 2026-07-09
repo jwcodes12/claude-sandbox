@@ -38,9 +38,17 @@ exploits the best **quality-per-`model_cost`** for that kind. So builders compet
 while claude writes better articles, and route each kind accordingly, favoring a
 model that's ~as good but cheaper. Builder reward = the night's average critic
 score (the quality gate); John's votes are the eventual ground truth. Reviewer ≠
-builder is enforced dynamically: the critic is chosen with `exclude=<builder>`
-(builders: claude, gemini now — add `codex` to `config.models.builder` once it's
-authed for studio and it joins the competition; critics: gemini + claude).
+builder is enforced dynamically: the critic is chosen with `exclude=<builder>`.
+Builders competing now: **claude, gemini, codex** (all authed for studio); the
+critic is any non-builder among them (+ gemini for the vision critic).
+
+**Timing / reliability.** A build may involve real high-reasoning thinking (codex
+takes a minute or few), so the build step allows up to ~30 min; the whole night
+is hard-capped at 1 h by the unit's `TimeoutStartSec`. Timeouts don't retry (a
+hung API can't blow the cap); transient errors retry once. The studio's CLIs are
+intentionally **pinned** (`/usr/bin/claude` system install, `agy`/`codex` static
+copies, Gemini via API) — the opc-user auto-updaters don't touch them, so an
+upstream CLI change can't silently break the nightly.
 
 ## Layout
 

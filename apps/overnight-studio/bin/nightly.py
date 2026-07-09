@@ -39,6 +39,10 @@ GALLERY = WEB / "gallery"
 CONFIG = HOME / "config.json"
 DOMAIN = "studio.johnwatkinscodes.work"
 CLAUDE_TIMEOUT = int(os.environ.get("STUDIO_CLAUDE_TIMEOUT", "300"))
+# Builds may involve real high-reasoning thinking (e.g. codex on an art toy), so
+# give the build step room. The whole night is still capped by the unit's
+# TimeoutStartSec (1h). A genuinely hung API call is caught by this ceiling.
+BUILD_TIMEOUT = int(os.environ.get("STUDIO_BUILD_TIMEOUT", "1800"))
 
 
 # ---------- helpers ----------
@@ -152,7 +156,7 @@ def run_model(model, prompt, timeout=CLAUDE_TIMEOUT):
     if model == "gemini":
         return gemini_generate(prompt, timeout=timeout)
     if model == "codex":
-        return False, "", "auth"   # not yet authed for the studio user
+        return codex_exec(prompt, timeout=timeout)
     if model != "claude":
         return False, "", "error"
     cmd = ["claude", "-p", prompt, "--disallowedTools", *NO_TOOLS]
@@ -207,6 +211,39 @@ def gemini_generate(prompt, image_path=None, model=GEMINI_MODEL, timeout=120):
         return False, "", "error"
 
 
+def codex_exec(prompt, model=None, timeout=CLAUDE_TIMEOUT):
+    """Codex (gpt) via `codex exec`. Runs non-interactively in a read-only sandbox
+    and writes only its final message to a temp file (-o), which we read back —
+    avoids the noisy event stream on stdout."""
+    out_f = f"/tmp/codex-{os.getpid()}-{abs(hash(prompt)) % 100000}.txt"
+    cmd = ["codex", "exec", "--skip-git-repo-check", "-s", "read-only", "-o", out_f]
+    if model:
+        cmd += ["-m", model]
+    cmd.append(prompt)
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, "", "timeout"
+    try:
+        with open(out_f) as f:
+            text = f.read()
+    except OSError:
+        text = ""
+    finally:
+        try:
+            os.remove(out_f)
+        except OSError:
+            pass
+    err = ((p.stderr or "") + (p.stdout or "")).lower()
+    if p.returncode != 0 or not text.strip():
+        if any(k in err for k in ("rate limit", "quota", "429", "usage limit")):
+            return False, "", "quota"
+        if any(k in err for k in ("unauthorized", "auth", "login", "401", "403")):
+            return False, "", "auth"
+        return False, "", "error"
+    return True, text, None
+
+
 def screenshot(html_path, out_path, w=900, h=650, timeout=60):
     """Headless-chromium screenshot of a built page (the vision critic's eyes)."""
     udir = f"/tmp/studio-chrome-{os.getpid()}"
@@ -228,7 +265,9 @@ def run_model_retry(model, prompt, tries=2, timeout=CLAUDE_TIMEOUT):
     ok, out, fk = False, "", "error"
     for i in range(tries):
         ok, out, fk = run_model(model, prompt, timeout=timeout)
-        if ok or fk == "auth":
+        # don't retry auth (won't fix itself) or timeout (already waited the full
+        # budget — retrying would blow the hour cap)
+        if ok or fk in ("auth", "timeout"):
             break
         if i < tries - 1:
             log(f"  {model} {fk}; retrying…")
@@ -449,7 +488,8 @@ def run_pipeline(dry=False):
 
     # 2) BUILD
     log("building index.html")
-    ok, out, fk = run_model_retry(bmodel, read_prompt("build", title=title, kind=kind, pitch=pitch, kind_guidance=guidance))
+    ok, out, fk = run_model_retry(bmodel, read_prompt(
+        "build", title=title, kind=kind, pitch=pitch, kind_guidance=guidance), timeout=BUILD_TIMEOUT)
     if not ok:
         bandit_update(con, "builder", bmodel, kind, failure=fk)
         _finish_fail(con, run_id, f"build:{fk}")

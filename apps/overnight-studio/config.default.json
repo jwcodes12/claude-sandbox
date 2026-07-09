@@ -52,9 +52,9 @@
     }
   },
   "models": {
-    "_comment": "Candidate models per role. The per-kind bandit explores/exploits among these; critic is chosen to differ from the builder. Builders COMPETE per kind (claude vs gemini now; add 'codex' here once authed and it'll join the competition for art toys etc.). code-critic lists both so a non-builder is always available.",
-    "builder": ["claude", "gemini"],
-    "code-critic": ["claude", "gemini"],
+    "_comment": "Candidate models per role. The per-kind bandit explores/exploits among these; critic is chosen to differ from the builder. Builders COMPETE per kind (claude, gemini, codex) so each content type routes to whoever scores best. code-critic lists all so a non-builder is always available.",
+    "builder": ["claude", "gemini", "codex"],
+    "code-critic": ["claude", "gemini", "codex"],
     "vision-critic": ["gemini"],
     "playtest-critic": ["gemini"]
   },
@@ -62,7 +62,7 @@
     "_comment": "Relative $/call hint. The bandit reward is quality-per-cost, so it prefers a model that's ~as good but cheaper, and only reaches for a pricier one when clearly better. Seed from reputable benchmarks/pricing.",
     "claude": 1.0,
     "gemini": 0.12,
-    "codex": 0.8
+    "codex": 1.0
   },
   "retro": {
     "promote_if": "all runs shipped AND peak budget < 0.70 AND zero failures over the week",
