@@ -1,0 +1,31 @@
+{
+  "name": "Stealr.io - Steal & Deal",
+  "short_name": "Stealr.io",
+  "description": "Free online property trading card game — collect rent, steal properties, and complete 3 sets to win!",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f0ede6",
+  "theme_color": "#f0ede6",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "promptPrefix": "Generate a single detailed image, vertical portrait orientation, of:",
+  "styleSuffix": "Medieval illuminated manuscript painting, oil-on-parchment texture, rich saturated earthy palette with gold-leaf accents, dramatic candlelit chiaroscuro, vertical 2:3 portrait composition with the subject centered, soft dark vignette around the edges, painterly brushstrokes, single focused subject, no text, no letters, no numbers, no borders, no UI elements, no watermark.",
+  "cards": [
+    { "key": "BROWN",          "subject": "A humble medieval peasant's wattle-and-daub hovel in a muddy field, thatched roof, smoke curling from a stone chimney, dusk light, a single lit window glowing warm." },
+    { "key": "LIGHTBLUE",      "subject": "A modest fisherman's timber cottage on stilts at the edge of a misty river, pale blue painted shutters, a small wooden rowboat tied to a post, dawn light." },
+    { "key": "PINK",           "subject": "A timber-framed medieval bakery in a cobbled town street, rose-pink lime-washed plaster between dark beams, a hanging wooden bread-loaf sign, morning glow." },
+    { "key": "ORANGE",         "subject": "A bustling medieval roadside inn at autumn dusk, terracotta orange clay-tiled roof, lantern light spilling from leaded windows, a wrought-iron signpost out front." },
+    { "key": "RED",            "subject": "A red-brick blacksmith's forge at night, glowing orange coals visible through the open doorway, iron tools and horseshoes hanging on the outer wall, embers floating up into the dark." },
+    { "key": "YELLOW",         "subject": "A sunlit golden manor house with pale yellow stucco walls and a tile roof, set among ripe wheat fields, a wooden harvest cart in the foreground, late afternoon light." },
+    { "key": "GREEN",          "subject": "A walled stone monastic abbey set deep in an emerald forest, moss-covered walls, ivy climbing a square tower, soft mist drifting between trees." },
+    { "key": "DARKBLUE",       "subject": "A grand royal palace with deep slate-blue spires and tall narrow towers, set against a stormy twilight sky, warm light glowing in tall arched windows." },
+    { "key": "UTILITY",        "subject": "A medieval stone watermill on a rushing forest stream, pale weathered walls, a slowly turning wooden waterwheel throwing droplets, overcast diffused light." },
+    { "key": "RAILROAD",       "subject": "A medieval merchant caravan road at dusk, three horse-drawn covered wagons in a line winding through low hills, a mile-marker stone in the foreground, dust kicked up by the wheels." },
+
+    { "key": "MONEY",          "subject": "A pile of medieval gold coins on a dark oak table, glinting in torchlight, a few coins spilling toward the viewer, a leather drawstring pouch open beside them." },
+
+    { "key": "THE_KEEP",       "subject": "A squat fortified medieval stone keep, a single thick square tower with narrow arrow slits, perched on a low grassy mound, a heraldic banner flying from the top, midday light." },
+    { "key": "THE_CASTLE",     "subject": "A grand medieval castle with multiple towers and crenellated battlements, colored flags flying from the spires, a drawbridge raised over a stone-walled moat, golden sunset light." },
+
+    { "key": "ROYAL_CHARTER",  "subject": "A rolled parchment scroll partially unfurled, broken red wax seal with the imprint of a crown, silk ribbon trailing, lying on a worn wooden writing desk beside a quill and inkwell, candlelit." },
+    { "key": "KINGDOM_BREAKER","subject": "A massive iron warhammer mid-swing smashing through a section of crenellated castle wall, stone blocks shattering and flying outward, dust cloud, dramatic low angle, embers in the dust." },
+    { "key": "SLY_STEAL",      "subject": "A hooded cutpurse's gloved hand reaching into a hanging velvet coin pouch, deep shadow on a rough stone wall behind, a single candle flame casting long shadows." },
+    { "key": "FORCED_TRADE",   "subject": "Two armored gauntleted hands exchanging objects across a heavy wooden table, one offering a large iron key, the other offering a rolled deed scroll, candlelit interior." },
+    { "key": "NOT_TODAY",      "subject": "An armored gauntlet raising a heavy round wooden shield to block an incoming sword strike, bright sparks flying from the impact, dark stone background." },
+    { "key": "TAX_COLLECTOR",  "subject": "A grim hooded medieval tax collector seated behind a heavy ledger book and ink quill, a tall stack of gold coins on the table beside him, candlelit interior, his face partly in shadow." },
+    { "key": "FEAST_DAY",      "subject": "A long medieval banquet table groaning with whole roast meats, loaves of bread, fruit, and brass goblets, woven tapestries hanging on the wall behind, warm hearthlight flooding the scene." },
+    { "key": "DOUBLE_TRIBUTE", "subject": "Two large overflowing oak chests of gold coins side by side on a stone floor, lids open, gemstones spilling out, torchlight reflecting off the gold." },
+
+    { "key": "WILD",           "subject": "A large heraldic banner of shimmering silk rippling in wind, the fabric iridescent and shifting through jewel-tone colors — sapphire, ruby, emerald, gold — held aloft by an unseen pole, neutral dark stone wall background." },
+    { "key": "TRIBUTE",        "subject": "A line of medieval villagers in homespun clothes carrying baskets of grain, fruit, and coin toward a lord seated on a wooden throne, candlelit great hall with stone columns." },
+
+    { "key": "BACKGROUND",     "subject": "A sprawling medieval kingdom landscape at dusk seen from a high vantage point, distant castles and walled towns dotting rolling green hills, golden sky fading to deep indigo blue, faint mist in the valleys, parchment-textured warm overlay, gentle dark vignette around the edges, painterly and atmospheric, suitable as a dark background image for a game UI." }
+  ]
+}

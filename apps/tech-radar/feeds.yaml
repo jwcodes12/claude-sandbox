@@ -11,28 +11,31 @@ settings:
     peakEndHour: 23
     offPeakMinimumMinutes: 60
   ranking:
-    clusterSimilarity: 0.22
+    clusterSimilarity: 0.20
+    twitterClusterSimilarity: 0.15
+    semanticClusterThreshold: 0.72
     minHotnessForBrief: 24
     minItemsForBrief: 2
     maxModelBriefs: ${TECH_RADAR_MAX_MODEL_BRIEFS:-12}
   models:
     # Briefs are optional; deterministic fallbacks work without any model.
-    # Default pipeline: Codex writes from the source bundle, Claude edits the
-    # draft. Both shell out to logged-in local CLIs, so no API key is needed.
+    # Default pipeline uses the 'agy' provider utilizing the logged-in Gemini 3.5 Flash APIs.
     # HTTP API providers still work via writerProvider/editorProvider:
     # anthropic or openai.
-    enabled: ${TECH_RADAR_ENABLE_LLM:-false}
+    enabled: ${TECH_RADAR_ENABLE_LLM:-true}
     provider: ${TECH_RADAR_MODEL_PROVIDER:-}
-    writerProvider: ${TECH_RADAR_WRITER_PROVIDER:-codex}
-    editorProvider: ${TECH_RADAR_EDITOR_PROVIDER:-claude}
+    writerProvider: ${TECH_RADAR_WRITER_PROVIDER:-agy}
+    editorProvider: ${TECH_RADAR_EDITOR_PROVIDER:-agy}
     enableEditor: ${TECH_RADAR_ENABLE_EDITOR:-true}
     smallModel: ${TECH_RADAR_SMALL_MODEL:-claude-haiku-4-5}
-    largeModel: ${TECH_RADAR_LARGE_MODEL:-claude-opus-4-8}
-    codexModel: ${TECH_RADAR_CODEX_MODEL:-gpt-5.5}
-    claudeModel: ${TECH_RADAR_CLAUDE_MODEL:-claude-opus-4-8}
+    largeModel: ${TECH_RADAR_LARGE_MODEL:-claude-sonnet-4-6}
+    codexModel: ${TECH_RADAR_CODEX_MODEL:-medium}
+    claudeModel: ${TECH_RADAR_CLAUDE_MODEL:-claude-sonnet-4-6}
     claudeFallbackModel: ${TECH_RADAR_CLAUDE_FALLBACK_MODEL:-claude-sonnet-4-6}
-    agyWriterModel: ${TECH_RADAR_AGY_WRITER_MODEL:-Gemini 3.5 Flash (Medium)}
+    agyWriterModel: ${TECH_RADAR_AGY_WRITER_MODEL:-Gemini 3.5 Flash (High)}
     agyEditorModel: ${TECH_RADAR_AGY_EDITOR_MODEL:-Gemini 3.5 Flash (High)}
+    geminiWriterModel: ${TECH_RADAR_GEMINI_WRITER_MODEL:-gemini-3.1-flash-lite}
+    geminiEditorModel: ${TECH_RADAR_GEMINI_EDITOR_MODEL:-gemini-2.5-pro}
     cliModel: ${TECH_RADAR_CLI_MODEL:-}
   newsboat:
     # Read tweets straight from the local newsboat sqlite cache.

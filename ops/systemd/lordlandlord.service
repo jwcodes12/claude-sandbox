@@ -1,0 +1,24 @@
+[Unit]
+Description=Lord Landlord WebSocket game server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+WorkingDirectory=/home/opc/claude-sandbox/apps/lordlandlord
+ExecStart=/usr/bin/node server/index.js
+Environment=LL_WS_PORT=18181
+Restart=on-failure
+RestartSec=3
+
+# Hardening: the server needs nothing but a socket and read access to the repo.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=yes
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

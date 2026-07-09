@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How to Play Stealr.io | Property Trading Card Game Rules &amp; Guide</title>
+    <meta
+      name="description"
+      content="Learn how to play Stealr.io — the free online property trading card game. Complete rules, card types, rent values, and strategy tips. 2-4 players, 106 cards, no download needed."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="rules.html" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://stealr.io/rules" />
+    <meta property="og:title" content="How to Play Stealr.io | Property Trading Card Game Rules & Guide" />
+    <meta
+      property="og:description"
+      content="Complete rules for Stealr.io — the free online property trading card game. Learn card types, rent values, and winning strategies."
+    />
+    <meta property="og:image" content="https://stealr.io/StealrLogoQuer.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="Stealr.io" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="How to Play Stealr.io | Property Trading Card Game Rules & Guide" />
+    <meta
+      name="twitter:description"
+      content="Complete rules for Stealr.io — the free online property trading card game. Learn card types, rent values, and winning strategies."
+    />
+    <meta name="twitter:image" content="https://stealr.io/StealrLogoQuer.jpg" />
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-K338QN7G09"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+      gtag('config', 'G-K338QN7G09');
+    </script>
+
+    <!-- JSON-LD: HowTo -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": "How to Play Stealr.io",
+        "description": "Learn how to play Stealr.io, the free online property trading card game. Complete 3 property sets to win.",
+        "image": "https://stealr.io/StealrLogoQuer.jpg",
+        "totalTime": "PT15M",
+        "step": [
+          {
+            "@type": "HowToStep",
+            "name": "Draw Cards",
+            "text": "At the start of your turn, you automatically draw 2 cards from the deck. If the deck is empty, the discard pile is reshuffled.",
+            "position": 1
+          },
+          {
+            "@type": "HowToStep",
+            "name": "Play Actions",
+            "text": "You have 3 actions per turn. Each card played costs 1 action. Play properties, collect rent, use action cards, or bank money.",
+            "position": 2
+          },
+          {
+            "@type": "HowToStep",
+            "name": "End Turn",
+            "text": "Click End to finish your turn. If you have more than 7 cards in hand, you must discard down to 7 before ending.",
+            "position": 3
+          },
+          {
+            "@type": "HowToStep",
+            "name": "Win the Game",
+            "text": "Be the first player to collect 3 complete property sets in different colors. Each color requires a specific number of cards to complete.",
+            "position": 4
+          }
+        ]
+      }
+    </script>
+
+    <!-- JSON-LD: FAQPage -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How many cards do you start with in Stealr.io?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Each player starts with 5 cards drawn from a 106-card deck. At the beginning of each turn, you automatically draw 2 more cards."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can you steal a complete property set in Stealr.io?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Complete property sets are protected and cannot be stolen with Sly Deal or Forced Deal. However, a Deal Breaker card can steal an entire complete set at once."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What happens when you have more than 7 cards at end of turn?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "If you have more than 7 cards in your hand at the end of your turn, you must discard cards until you have 7 or fewer. Discarded cards go to the discard pile."
+            }
+          }
+        ]
+      }
+    </script>
+
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.7;
+        color: #1a1a1a;
+        background: #f0ede6;
+        padding: 24px;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      /* Navigation */
+      nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 40px;
+        padding-bottom: 16px;
+        border-bottom: 3px solid #1a1a1a;
+      }
+      nav .logo {
+        font-size: 20px;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        color: #1a1a1a;
+        text-decoration: none;
+      }
+      nav .nav-links {
+        display: flex;
+        gap: 20px;
+      }
+      nav .nav-links a {
+        font-size: 14px;
+        font-weight: 700;
+        color: #1a1a1a;
+        text-decoration: none;
+        padding: 4px 0;
+        border-bottom: 2px solid transparent;
+        transition: border-color 0.2s;
+      }
+      nav .nav-links a:hover {
+        border-bottom-color: #1a1a1a;
+      }
+
+      /* Headings */
+      h1 {
+        font-size: clamp(26px, 5vw, 36px);
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        margin-bottom: 8px;
+        line-height: 1.2;
+      }
+      .subtitle {
+        font-size: 16px;
+        color: #4a4a4a;
+        margin-bottom: 32px;
+      }
+      h2 {
+        font-size: 22px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 3px solid #1a1a1a;
+      }
+      h3 {
+        font-size: 17px;
+        font-weight: 800;
+        margin-bottom: 8px;
+        color: #1a1a1a;
+      }
+
+      /* Sections */
+      .section {
+        margin-bottom: 40px;
+      }
+      .card-box {
+        background: #e8e4dc;
+        border: 3px solid #1a1a1a;
+        box-shadow: 4px 4px 0px #1a1a1a;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      p {
+        margin-bottom: 12px;
+        color: #4a4a4a;
+      }
+      strong {
+        color: #1a1a1a;
+      }
+      ul,
+      ol {
+        padding-left: 24px;
+        margin-bottom: 12px;
+      }
+      li {
+        margin-bottom: 6px;
+        color: #4a4a4a;
+      }
+
+      /* Steps */
+      .step {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      .step-num {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        background: #1a1a1a;
+        color: #f0ede6;
+        font-weight: 900;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0;
+      }
+      .step-content {
+        flex: 1;
+      }
+      .step-content strong {
+        display: block;
+        margin-bottom: 2px;
+      }
+      .step-content p {
+        margin-bottom: 0;
+      }
+
+      /* Card types */
+      .card-type {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #d5d0c8;
+      }
+      .card-type:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+        margin-bottom: 0;
+      }
+      .card-type-label {
+        font-weight: 800;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 4px;
+      }
+
+      /* Rent table */
+      .rent-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .rent-table th {
+        text-align: left;
+        padding: 10px 12px;
+        background: #1a1a1a;
+        color: #f0ede6;
+        font-weight: 800;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .rent-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #d5d0c8;
+        color: #4a4a4a;
+      }
+      .rent-table tr:last-child td {
+        border-bottom: none;
+      }
+      .rent-table tr:nth-child(even) td {
+        background: rgba(0, 0, 0, 0.03);
+      }
+      .color-dot {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid #1a1a1a;
+        border-radius: 0;
+        vertical-align: middle;
+        margin-right: 8px;
+      }
+
+      /* Quick reference grid */
+      .ref-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .ref-item {
+        background: #e8e4dc;
+        border: 3px solid #1a1a1a;
+        box-shadow: 4px 4px 0px #1a1a1a;
+        padding: 14px;
+        text-align: center;
+      }
+      .ref-item .ref-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #888;
+        margin-bottom: 4px;
+      }
+      .ref-item .ref-value {
+        font-size: 20px;
+        font-weight: 900;
+        color: #1a1a1a;
+      }
+
+      /* Tips */
+      .tip {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 12px;
+      }
+      .tip-icon {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        background: #1a1a1a;
+        color: #f0ede6;
+        font-weight: 900;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* CTA */
+      .cta-box {
+        background: #1a1a1a;
+        color: #f0ede6;
+        padding: 32px;
+        text-align: center;
+        margin: 40px 0;
+        border: 3px solid #1a1a1a;
+        box-shadow: 4px 4px 0px #4a4a4a;
+      }
+      .cta-box h2 {
+        color: #f0ede6;
+        border-bottom: none;
+        margin-bottom: 8px;
+        padding-bottom: 0;
+      }
+      .cta-box p {
+        color: #ccc;
+        margin-bottom: 20px;
+      }
+      .cta-btn {
+        display: inline-block;
+        background: #f0ede6;
+        color: #1a1a1a;
+        font-weight: 900;
+        font-size: 16px;
+        padding: 14px 32px;
+        text-decoration: none;
+        border: 3px solid #f0ede6;
+        letter-spacing: 0.02em;
+        transition: background 0.2s, color 0.2s;
+      }
+      .cta-btn:hover {
+        background: transparent;
+        color: #f0ede6;
+      }
+
+      /* Footer */
+      footer {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 3px solid #1a1a1a;
+        text-align: center;
+      }
+      footer .footer-links {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 20px;
+        margin-bottom: 16px;
+      }
+      footer a {
+        font-size: 13px;
+        font-weight: 700;
+        color: #1a1a1a;
+        text-decoration: none;
+      }
+      footer a:hover {
+        text-decoration: underline;
+      }
+      footer .footer-note {
+        font-size: 12px;
+        color: #888;
+      }
+
+      /* Responsive */
+      @media (max-width: 600px) {
+        body {
+          padding: 16px;
+        }
+        nav {
+          flex-direction: column;
+          gap: 12px;
+          align-items: flex-start;
+        }
+        .ref-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .rent-table {
+          font-size: 13px;
+        }
+        .rent-table th,
+        .rent-table td {
+          padding: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header Navigation -->
+      <nav>
+        <a href="index.html" class="logo">Stealr.io</a>
+        <div class="nav-links">
+          <a href="index.html">Play Now</a>
+          <a href="strategy.html">Strategy</a>
+          <a href="cards.html">Cards</a>
+        </div>
+      </nav>
+
+      <!-- H1 -->
+      <div class="section">
+        <h1>How to Play Stealr.io &mdash; Complete Rules Guide</h1>
+        <p class="subtitle">
+          Everything you need to know about the property trading card game. Master the rules, learn every card type, and start winning.
+        </p>
+      </div>
+
+      <!-- Game Overview -->
+      <div class="section">
+        <h2>Game Overview</h2>
+        <div class="card-box">
+          <p>
+            <strong>Stealr.io</strong> is a fast-paced property trading card game for <strong>2&ndash;4 players</strong>.
+            The deck contains <strong>106 cards</strong> including money, properties, action cards, rent cards, wildcards, and buildings.
+          </p>
+          <p>
+            Your goal: be the first to collect <strong>3 complete property sets</strong> in different colors.
+            Each color requires a specific number of cards to complete (for example, Brown needs 2, Railroad needs 4).
+          </p>
+          <p style="margin-bottom: 0">
+            Play free online &mdash; no download, no signup. Just open your browser and start a game instantly.
+          </p>
+        </div>
+      </div>
+
+      <!-- Setup -->
+      <div class="section">
+        <h2>Setup</h2>
+        <p>
+          The game uses a deck of <strong>106 cards</strong> consisting of:
+        </p>
+        <ul>
+          <li><strong>20 Money Cards</strong> &mdash; values from 1M to 10M</li>
+          <li><strong>28 Property Cards</strong> &mdash; across 10 different colors</li>
+          <li><strong>Action Cards</strong> &mdash; Pass Go, Birthday, Debt Collector, Double Rent</li>
+          <li><strong>Rent Cards</strong> &mdash; collect rent based on your properties</li>
+          <li><strong>Wildcard / Joker Cards</strong> &mdash; count as any color property</li>
+          <li><strong>Building Cards</strong> &mdash; Houses and Hotels to boost rent</li>
+        </ul>
+        <p>
+          Each player draws <strong>5 cards</strong> to start. The remaining cards form the draw pile.
+        </p>
+      </div>
+
+      <!-- Turn Structure -->
+      <div class="section">
+        <h2>Turn Structure</h2>
+        <p>Every turn follows 3 simple steps:</p>
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <strong>Draw 2 Cards</strong>
+            <p>At the start of your turn, you automatically draw 2 cards from the deck. If the deck is empty, the discard pile is reshuffled.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <strong>Play Up to 3 Actions</strong>
+            <p>You have <strong>3 actions</strong> per turn. Each card you play costs 1 action. You can play properties, collect rent, use action cards, or bank money. You don't have to use all 3 actions.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <strong>End Turn</strong>
+            <p>Click <strong>"End"</strong> to finish your turn. If you have more than <strong>7 cards</strong> in your hand, you must discard down to 7 before ending.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- How to Play a Card -->
+      <div class="section">
+        <h2>How to Play a Card</h2>
+        <div class="card-box">
+          <p>
+            <strong>Tap any card in your hand</strong> to see it enlarged with these options:
+          </p>
+          <ul>
+            <li><strong>Play</strong> &mdash; Play the card (place a property, use an action card, charge rent)</li>
+            <li><strong>Bank</strong> &mdash; Put the card in your bank as money (every card has a money value)</li>
+            <li><strong>Flip</strong> &mdash; Flip a dual joker to its other color side</li>
+            <li><strong>Back</strong> &mdash; Put the card back in your hand, nothing happens</li>
+          </ul>
+          <p style="margin-bottom: 0">
+            You can also tap outside the card preview to close it without taking any action.
+          </p>
+        </div>
+      </div>
+
+      <!-- Card Types -->
+      <div class="section">
+        <h2>Card Types</h2>
+
+        <div class="card-type">
+          <div class="card-type-label">Money Cards (1M&ndash;10M)</div>
+          <p>
+            Money cards go into your bank. Your bank is <strong>protected</strong> &mdash; no one can steal money from it.
+            Money is used to pay rent, birthday fees, and debt collector charges. Any card in the game can also be banked for its face value.
+          </p>
+        </div>
+
+        <div class="card-type">
+          <div class="card-type-label">Property Cards</div>
+          <p>
+            Collect property cards across <strong>10 different colors</strong> to build complete sets.
+            A <strong>complete set cannot be stolen</strong> with Sly Deal or Forced Deal &mdash; it is protected.
+            Each color requires a specific number of cards (see rent table below).
+          </p>
+        </div>
+
+        <div class="card-type">
+          <div class="card-type-label">Joker / Wildcard</div>
+          <p>
+            Joker cards count as a property for <strong>any color</strong>. Dual jokers can be <strong>flipped</strong> between 2 specific colors.
+            Use them to fill gaps in your property sets. The universal joker (rainbow) fits any color.
+          </p>
+        </div>
+
+        <div class="card-type">
+          <div class="card-type-label">Rent Cards</div>
+          <p>
+            Play a rent card to collect rent from your opponent based on the number of properties you own in that color.
+            The more properties you have, the higher the rent. See the rent table below for exact values.
+          </p>
+        </div>
+
+        <div class="card-type">
+          <div class="card-type-label">Action Cards</div>
+          <ul>
+            <li><strong>Pass Go</strong> &mdash; Draw 2 extra cards from the deck</li>
+            <li><strong>Birthday</strong> &mdash; Your opponent pays you <strong>2M</strong></li>
+            <li><strong>Debt Collector</strong> &mdash; Your opponent pays you <strong>5M</strong></li>
+            <li><strong>Double Rent</strong> &mdash; Doubles the next rent you charge (costs 1 extra action, so 2 actions total for doubled rent)</li>
+          </ul>
+        </div>
+
+        <div class="card-type">
+          <div class="card-type-label">Theft Cards</div>
+          <ul>
+            <li><strong>Deal Breaker</strong> &mdash; Steal an <strong>entire complete set</strong> from your opponent</li>
+            <li><strong>Sly Deal</strong> &mdash; Steal <strong>1 property</strong> from your opponent (not from a complete set)</li>
+            <li><strong>Forced Deal</strong> &mdash; <strong>Swap</strong> one of your properties with one of your opponent's (not from complete sets)</li>
+          </ul>
+        </div>
+
+        <div class="card-type">
+          <div class="card-type-label">Just Say No</div>
+          <p>
+            Blocks <strong>any action card</strong> played against you &mdash; including rent, theft, birthday, and debt collector.
+            When your opponent plays an action against you and you have a Just Say No card, it is <strong>automatically offered</strong>.
+            Your opponent can counter with their own Just Say No, creating a counter chain.
+          </p>
+        </div>
+
+        <div class="card-type">
+          <div class="card-type-label">House &amp; Hotel</div>
+          <p>
+            Houses and Hotels can only be built on <strong>complete property sets</strong>.
+            A House increases rent, and a Hotel (requires a House first) increases it even further.
+            Buildings stay with the set and are protected along with it.
+          </p>
+        </div>
+      </div>
+
+      <!-- Property Sets & Rent Values -->
+      <div class="section">
+        <h2>Property Sets &amp; Rent Values</h2>
+        <p>Each color has a specific set size and rent values based on how many properties you own:</p>
+        <div class="card-box" style="padding: 0; overflow-x: auto">
+          <table class="rent-table">
+            <thead>
+              <tr>
+                <th>Color</th>
+                <th>Set Size</th>
+                <th>Rent Values</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="color-dot" style="background: #8B4513"></span>Brown</td>
+                <td>2 cards</td>
+                <td>1M, 2M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #87CEEB"></span>Light Blue</td>
+                <td>3 cards</td>
+                <td>1M, 2M, 3M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #FF69B4"></span>Pink</td>
+                <td>3 cards</td>
+                <td>1M, 2M, 4M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #FF8C00"></span>Orange</td>
+                <td>3 cards</td>
+                <td>1M, 3M, 5M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #DC143C"></span>Red</td>
+                <td>3 cards</td>
+                <td>2M, 3M, 6M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #FFD700"></span>Yellow</td>
+                <td>3 cards</td>
+                <td>2M, 4M, 6M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #228B22"></span>Green</td>
+                <td>3 cards</td>
+                <td>2M, 4M, 7M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #00008B"></span>Dark Blue</td>
+                <td>2 cards</td>
+                <td>3M, 8M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #90EE90"></span>Utility</td>
+                <td>2 cards</td>
+                <td>1M, 2M</td>
+              </tr>
+              <tr>
+                <td><span class="color-dot" style="background: #2a2a2a"></span>Railroad</td>
+                <td>4 cards</td>
+                <td>1M, 2M, 3M, 4M</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Quick Reference -->
+      <div class="section">
+        <h2>Quick Reference</h2>
+        <div class="ref-grid">
+          <div class="ref-item">
+            <div class="ref-label">Goal</div>
+            <div class="ref-value">3 Sets</div>
+          </div>
+          <div class="ref-item">
+            <div class="ref-label">Draw</div>
+            <div class="ref-value">2 Cards</div>
+          </div>
+          <div class="ref-item">
+            <div class="ref-label">Actions</div>
+            <div class="ref-value">3 / Turn</div>
+          </div>
+          <div class="ref-item">
+            <div class="ref-label">Hand Limit</div>
+            <div class="ref-value">7</div>
+          </div>
+          <div class="ref-item">
+            <div class="ref-label">Bank</div>
+            <div class="ref-value">Protected</div>
+          </div>
+          <div class="ref-item">
+            <div class="ref-label">Full Sets</div>
+            <div class="ref-value">Protected</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tips -->
+      <div class="section">
+        <h2>Tips &amp; Strategy</h2>
+        <div class="card-box">
+          <div class="tip">
+            <div class="tip-icon">1</div>
+            <p style="margin-bottom: 0">
+              <strong>Bank early and often.</strong> Any card can be banked for its money value. Having cash on hand lets you pay off rent and debt without losing properties.
+            </p>
+          </div>
+          <div class="tip">
+            <div class="tip-icon">2</div>
+            <p style="margin-bottom: 0">
+              <strong>Complete small sets first.</strong> Brown (2 cards) and Dark Blue (2 cards) are the fastest to complete. Once a set is full, it's protected from theft.
+            </p>
+          </div>
+          <div class="tip">
+            <div class="tip-icon">3</div>
+            <p style="margin-bottom: 0">
+              <strong>Save Just Say No for critical moments.</strong> Don't waste it blocking a 1M birthday. Save it for when your opponent plays a Deal Breaker or a big rent card.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta-box">
+        <h2>Ready to Play?</h2>
+        <p>Start a free game now &mdash; no download, no signup. Challenge friends or find an opponent instantly.</p>
+        <a href="index.html" class="cta-btn">Play Stealr.io Free</a>
+      </div>
+
+      <!-- Footer -->
+      <footer>
+        <div class="footer-links">
+          <a href="index.html">Play Now</a>
+          <a href="rules.html">Rules</a>
+          <a href="strategy.html">Strategy</a>
+          <a href="cards.html">Cards</a>
+          <a href="privacy.html">Privacy</a>
+        </div>
+        <p class="footer-note">Made with Stealr.io</p>
+      </footer>
+    </div>
+  </body>
+</html>

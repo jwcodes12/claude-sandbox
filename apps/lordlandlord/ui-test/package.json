@@ -1,0 +1,20 @@
+{
+  "name": "@test/ui-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node run-all-tests.js",
+    "test:unit": "node test-unit-cards.js",
+    "test:comprehensive": "node test-comprehensive.js",
+    "test:full-game": "node test-full-game.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "puppeteer": "^24.43.1"
+  }
+}
