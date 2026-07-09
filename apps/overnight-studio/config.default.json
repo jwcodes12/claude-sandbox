@@ -1,0 +1,65 @@
+{
+  "_comment": "Default config for Overnight Studio. The LIVE copy at /home/studio/config.json is authoritative and mutable (level + bandit state live in sqlite). deploy.sh never overwrites an existing live config.",
+  "domain": "studio.johnwatkinscodes.work",
+  "public": {
+    "_comment": "Served at the root of studio.johnwatkinscodes.work via the cloudflared 'box' tunnel (ingress -> nginx :80). base='' => gallery at /, builds at /s/<slug>/. Covered by the existing one-level *.johnwatkinscodes.work cert.",
+    "mode": "path",
+    "base": "",
+    "domain": "studio.johnwatkinscodes.work",
+    "origin": "https://studio.johnwatkinscodes.work"
+  },
+  "level": 1,
+  "state": {
+    "consecutive_failures": 0,
+    "last_retro": null,
+    "ceiling": 3
+  },
+  "cadence": {
+    "_comment": "Energy budget per weekday. Sunday is retro (no build). Saturday is the heavy games night.",
+    "0": { "name": "sunday-retro", "build": false },
+    "1": { "name": "weeknight-light", "build": true, "energy": 1 },
+    "2": { "name": "weeknight-light", "build": true, "energy": 1 },
+    "3": { "name": "weeknight-light", "build": true, "energy": 1 },
+    "4": { "name": "weeknight-light", "build": true, "energy": 1 },
+    "5": { "name": "friday-medium", "build": true, "energy": 2 },
+    "6": { "name": "saturday-heavy", "build": true, "energy": 3 }
+  },
+  "levels": {
+    "_comment": "Level ladder. Studio can only climb through IMPLEMENTED levels; at the ceiling it writes an upgrade proposal for John instead of self-promoting.",
+    "1": {
+      "name": "single-toy",
+      "implemented": true,
+      "kinds": ["art-toy", "site"],
+      "desc": "One self-contained index.html + vanilla JS toy or micro-site. No build step.",
+      "max_files": 3,
+      "energy_cost": 1
+    },
+    "2": {
+      "name": "interactive",
+      "implemented": true,
+      "kinds": ["art-toy", "site", "game"],
+      "desc": "Multi-screen or stateful interaction; may split into a few JS modules.",
+      "max_files": 6,
+      "energy_cost": 2
+    },
+    "3": {
+      "name": "small-game",
+      "implemented": true,
+      "kinds": ["game", "art-toy"],
+      "desc": "A playable small game with a loop, score, and restart. Saturday territory.",
+      "max_files": 10,
+      "energy_cost": 3
+    }
+  },
+  "models": {
+    "_comment": "Candidate CLIs per role. The bandit picks among these; reviewer/critic must differ from the builder. v0 uses claude as builder + a claude code-critic with a distinct role prompt; v1 adds gemini/codex once authed as the studio user.",
+    "builder": ["claude"],
+    "code-critic": ["claude"],
+    "vision-critic": ["claude"],
+    "playtest-critic": ["claude"]
+  },
+  "retro": {
+    "promote_if": "all runs shipped AND peak budget < 0.70 AND zero failures over the week",
+    "demote_if": "2+ failures over the week"
+  }
+}

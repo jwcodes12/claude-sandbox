@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+# live/box-only state (never versioned):
+data/
+logs/
+config.json
+.config/

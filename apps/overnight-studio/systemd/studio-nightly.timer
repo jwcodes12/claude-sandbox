@@ -1,0 +1,12 @@
+[Unit]
+Description=Overnight Studio nightly build (~02:30 ET)
+
+[Timer]
+# Fires daily at 02:30 America/New_York. The pipeline itself skips Sunday
+# (retro night). Persistent catches a missed run after downtime.
+OnCalendar=*-*-* 02:30:00 America/New_York
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

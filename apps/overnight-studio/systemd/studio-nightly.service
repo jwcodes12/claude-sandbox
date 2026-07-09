@@ -1,0 +1,16 @@
+[Unit]
+Description=Overnight Studio nightly build pipeline
+After=network-online.target studio-votes.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=studio
+Group=studio
+# Auth: CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` run as studio).
+EnvironmentFile=/home/studio/.config/studio/env
+ExecStart=/home/studio/bin/nightly.sh
+TimeoutStartSec=3600
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/studio /srv/studio

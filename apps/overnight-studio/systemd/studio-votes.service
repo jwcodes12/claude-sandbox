@@ -1,0 +1,20 @@
+[Unit]
+Description=Overnight Studio vote service (localhost :8377)
+After=network.target
+
+[Service]
+User=studio
+Group=studio
+ExecStart=/usr/bin/env python3 /home/studio/bin/vote_service.py
+Environment=STUDIO_DB=/home/studio/data/studio.sqlite
+Restart=on-failure
+RestartSec=3
+# hardening: no new privileges, private tmp, read-only except the data dir
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/studio/data
+
+[Install]
+WantedBy=multi-user.target
