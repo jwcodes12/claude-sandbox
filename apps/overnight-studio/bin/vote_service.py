@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Overnight Studio vote service. Tiny stdlib HTTP server, localhost only.
+"""Overnight Studio vote + feedback service. Tiny stdlib HTTP, localhost only.
 
-nginx proxies /api/ on the public *.studio vhost to 127.0.0.1:8377, so from a
-browser this is same-origin over HTTPS (CF terminates TLS). Writes John's
-thumbs to the same sqlite the scoreboard uses.
+nginx proxies /api/ on the public studio vhost to 127.0.0.1:8377, so from a
+browser this is same-origin over HTTPS. A "voter" is a browser-stored random id,
+so a thumb is one toggleable vote per (slug, voter) — counts stay correct on
+reload and the UI can show what you already picked.
 
 Endpoints:
-  GET  /api/health           -> {"ok": true}
-  GET  /api/votes?slug=SLUG  -> {"slug","up","down","score"}   (omit slug -> all)
-  POST /api/vote  {slug, vote}  vote in {1,-1}  -> {"ok","up","down"}
+  GET  /api/health
+  GET  /api/votes[?voter=ID]        -> {"votes":[{slug,up,down}], "mine":{slug:vote}}
+  GET  /api/votes?slug=SLUG[&voter=] -> {slug,up,down,score,myvote}
+  POST /api/vote     {slug, vote in {1,-1,0}, voter}  (0 = remove my vote)
+  POST /api/feedback {slug, text, voter}
 """
 import json
 import os
@@ -28,14 +31,23 @@ def db():
     return con
 
 
-def tally(con, slug):
-    row = con.execute(
+def valid_slug(s):
+    return bool(s) and len(s) <= 80 and all(c.isalnum() or c in "-_" for c in s)
+
+
+def valid_voter(s):
+    return bool(s) and len(s) <= 64 and all(c.isalnum() or c in "-_" for c in s)
+
+
+def tally(con, slug, voter=None):
+    r = con.execute(
         "SELECT COALESCE(SUM(vote=1),0) up, COALESCE(SUM(vote=-1),0) down "
-        "FROM votes WHERE slug=? AND source='john'",
-        (slug,),
-    ).fetchone()
-    up, down = row["up"], row["down"]
-    return {"slug": slug, "up": up, "down": down, "score": up - down}
+        "FROM votes WHERE slug=?", (slug,)).fetchone()
+    out = {"slug": slug, "up": r["up"], "down": r["down"], "score": r["up"] - r["down"]}
+    if voter:
+        m = con.execute("SELECT vote FROM votes WHERE slug=? AND voter=?", (slug, voter)).fetchone()
+        out["myvote"] = m["vote"] if m else 0
+    return out
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -48,7 +60,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, *a):  # keep journald quiet; nginx has the access log
+    def _body(self):
+        n = int(self.headers.get("Content-Length", 0) or 0)
+        if n <= 0 or n > 8192:
+            return None
+        try:
+            return json.loads(self.rfile.read(n).decode() or "{}")
+        except Exception:
+            return None
+
+    def log_message(self, *a):
         pass
 
     def do_GET(self):
@@ -59,63 +80,82 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/api/votes", "/votes"):
             q = parse_qs(u.query)
             slug = (q.get("slug") or [None])[0]
+            voter = (q.get("voter") or [None])[0]
+            if voter and not valid_voter(voter):
+                voter = None
+            con = db()
             try:
-                con = db()
                 if slug:
-                    return self._send(200, tally(con, slug))
+                    return self._send(200, tally(con, slug, voter))
                 rows = con.execute(
                     "SELECT slug, COALESCE(SUM(vote=1),0) up, COALESCE(SUM(vote=-1),0) down "
-                    "FROM votes WHERE source='john' GROUP BY slug"
-                ).fetchall()
-                return self._send(200, {"votes": [dict(r) for r in rows]})
+                    "FROM votes GROUP BY slug").fetchall()
+                out = {"votes": [dict(r) for r in rows]}
+                if voter:
+                    mine = con.execute("SELECT slug, vote FROM votes WHERE voter=?", (voter,)).fetchall()
+                    out["mine"] = {r["slug"]: r["vote"] for r in mine}
+                return self._send(200, out)
             except Exception as e:
                 return self._send(500, {"error": str(e)})
             finally:
-                try:
-                    con.close()
-                except Exception:
-                    pass
+                con.close()
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
         u = urlparse(self.path)
         path = u.path.rstrip("/") or "/"
-        if path not in ("/api/vote", "/vote"):
-            return self._send(404, {"error": "not found"})
-        try:
-            n = int(self.headers.get("Content-Length", 0) or 0)
-            if n <= 0 or n > 4096:
-                return self._send(400, {"error": "bad body"})
-            data = json.loads(self.rfile.read(n).decode() or "{}")
-        except Exception:
-            return self._send(400, {"error": "bad json"})
+        data = self._body()
+        if data is None:
+            return self._send(400, {"error": "bad body"})
         slug = str(data.get("slug", "")).strip()
-        try:
-            vote = int(data.get("vote"))
-        except (TypeError, ValueError):
-            vote = 0
-        # slug must look like a real build slug; vote must be +/-1
-        if not slug or len(slug) > 80 or not all(c.isalnum() or c in "-_" for c in slug):
+        voter = str(data.get("voter", "")).strip()
+        if not valid_slug(slug):
             return self._send(400, {"error": "bad slug"})
-        if vote not in (1, -1):
-            return self._send(400, {"error": "vote must be 1 or -1"})
-        try:
-            con = db()
-            con.execute(
-                "INSERT INTO votes(slug, vote, source) VALUES(?,?, 'john')",
-                (slug, vote),
-            )
-            con.commit()
-            out = tally(con, slug)
-            out["ok"] = True
-            return self._send(200, out)
-        except Exception as e:
-            return self._send(500, {"error": str(e)})
-        finally:
+        if not valid_voter(voter):
+            return self._send(400, {"error": "bad voter"})
+
+        if path in ("/api/vote", "/vote"):
             try:
+                vote = int(data.get("vote"))
+            except (TypeError, ValueError):
+                return self._send(400, {"error": "bad vote"})
+            if vote not in (1, -1, 0):
+                return self._send(400, {"error": "vote must be 1, -1, or 0"})
+            con = db()
+            try:
+                if vote == 0:
+                    con.execute("DELETE FROM votes WHERE slug=? AND voter=?", (slug, voter))
+                else:
+                    con.execute(
+                        "INSERT INTO votes(slug,voter,vote,source,updated_at) "
+                        "VALUES(?,?,?, 'john', datetime('now')) "
+                        "ON CONFLICT(slug,voter) DO UPDATE SET vote=excluded.vote, updated_at=datetime('now')",
+                        (slug, voter, vote))
+                con.commit()
+                out = tally(con, slug, voter)
+                out["ok"] = True
+                return self._send(200, out)
+            except Exception as e:
+                return self._send(500, {"error": str(e)})
+            finally:
                 con.close()
-            except Exception:
-                pass
+
+        if path in ("/api/feedback", "/feedback"):
+            text = str(data.get("text", "")).strip()
+            if not text or len(text) > 2000:
+                return self._send(400, {"error": "feedback must be 1-2000 chars"})
+            con = db()
+            try:
+                con.execute("INSERT INTO feedback(slug,voter,text,source) VALUES(?,?,?, 'john')",
+                            (slug, voter, text))
+                con.commit()
+                return self._send(200, {"ok": True})
+            except Exception as e:
+                return self._send(500, {"error": str(e)})
+            finally:
+                con.close()
+
+        return self._send(404, {"error": "not found"})
 
 
 if __name__ == "__main__":

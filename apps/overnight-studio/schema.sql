@@ -34,14 +34,30 @@ CREATE TABLE IF NOT EXISTS critic_scores (
 );
 
 -- John's sparse ground truth (👍/👎) + soft signals (no-visit).
+-- One row per (slug, voter): a voter is a browser-stored id, so a thumb is a
+-- single toggleable vote, not an append. Counts stay meaningful on reload.
 CREATE TABLE IF NOT EXISTS votes (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   slug          TEXT NOT NULL,
+  voter         TEXT NOT NULL DEFAULT 'anon',
   vote          INTEGER NOT NULL,           -- +1 up, -1 down
   source        TEXT NOT NULL DEFAULT 'john', -- john | soft-novisit
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_votes_slug_voter ON votes(slug, voter);
+CREATE INDEX IF NOT EXISTS idx_votes_slug ON votes(slug);
+
+-- Free-text feedback per build — richer ground truth than a thumb.
+CREATE TABLE IF NOT EXISTS feedback (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug          TEXT NOT NULL,
+  voter         TEXT,
+  text          TEXT NOT NULL,
+  source        TEXT NOT NULL DEFAULT 'john',
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_votes_slug ON votes(slug);
+CREATE INDEX IF NOT EXISTS idx_feedback_slug ON feedback(slug);
 
 -- Bandit scoreboard: which model suits which role/output-type, learned empirically.
 -- reward_sum/trials = mean reward; failures counts quota/auth/parse outcomes.

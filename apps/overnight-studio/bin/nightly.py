@@ -242,6 +242,11 @@ def _card(cfg, it, hero=False):
               <button data-v="-1">👎 <b>{it['down']}</b></button>
             </div>
           </div>
+          <form class="fb" data-slug="{esc(it['slug'])}">
+            <input class="fbin" type="text" maxlength="2000" placeholder="tell the studio what you think…">
+            <button class="fbsend" type="submit">Send</button>
+            <span class="fbmsg"></span>
+          </form>
         </div>
       </article>"""
 
@@ -470,6 +475,14 @@ GALLERY_TMPL = """<!DOCTYPE html>
         border-radius:9px;padding:6px 12px;margin-left:8px;cursor:pointer}
   .vote button:active{transform:translateY(1px)}
   .vote button.on{border-color:#7c86ff;background:#20264a}
+  .fb{display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap}
+  .fbin{flex:1 1 160px;min-width:0;font:inherit;font-size:13px;background:#0f131b;color:#e7e9ee;
+        border:1px solid #2a3040;border-radius:9px;padding:7px 10px}
+  .fbin::placeholder{color:#5c6580}
+  .fbsend{font:inherit;font-size:13px;background:#1a1f2b;color:#e7e9ee;border:1px solid #2a3040;
+        border-radius:9px;padding:7px 12px;cursor:pointer}
+  .fbsend:active{transform:translateY(1px)}
+  .fbmsg{font-size:12px;color:#6fce9b}
 </style>
 </head>
 <body>
@@ -483,25 +496,71 @@ GALLERY_TMPL = """<!DOCTYPE html>
 {{ARCHIVE}}
 </main>
 <script>
-document.querySelectorAll('.vote').forEach(function(box){
-  var slug = box.getAttribute('data-slug');
-  box.querySelectorAll('button').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var v = parseInt(btn.getAttribute('data-v'),10);
-      btn.disabled = true;
-      fetch('{{API}}/vote',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({slug:slug,vote:v})})
-        .then(function(r){return r.json()})
-        .then(function(d){
-          if(d && typeof d.up==='number'){
-            box.querySelector('[data-v="1"] b').textContent = d.up;
-            box.querySelector('[data-v="-1"] b').textContent = d.down;
-            btn.classList.add('on');
-          }
-        }).catch(function(){}).finally(function(){btn.disabled=false});
+(function(){
+  var API = '{{API}}';
+  // stable per-browser voter id so a thumb is one toggleable vote
+  var voter = localStorage.getItem('studio_voter');
+  if(!voter){
+    voter = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+Math.random())
+              .replace(/[^a-zA-Z0-9]/g,'').slice(0,32);
+    localStorage.setItem('studio_voter', voter);
+  }
+  function setCounts(box, d){
+    box.querySelector('[data-v="1"] b').textContent = d.up;
+    box.querySelector('[data-v="-1"] b').textContent = d.down;
+  }
+  function mark(box, mine){
+    box.querySelectorAll('button').forEach(function(b){
+      b.classList.toggle('on', parseInt(b.getAttribute('data-v'),10) === mine);
+    });
+    box.setAttribute('data-mine', mine || 0);
+  }
+  // 1) load live counts + which ones I already voted on
+  fetch(API+'/votes?voter='+voter).then(function(r){return r.json()}).then(function(d){
+    var counts={}; (d.votes||[]).forEach(function(v){counts[v.slug]=v});
+    var mine=d.mine||{};
+    document.querySelectorAll('.vote').forEach(function(box){
+      var slug=box.getAttribute('data-slug');
+      if(counts[slug]) setCounts(box, counts[slug]);
+      mark(box, mine[slug]||0);
+    });
+  }).catch(function(){});
+  // 2) toggle vote on click
+  document.querySelectorAll('.vote').forEach(function(box){
+    var slug=box.getAttribute('data-slug');
+    box.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var v=parseInt(btn.getAttribute('data-v'),10);
+        var cur=parseInt(box.getAttribute('data-mine')||'0',10);
+        var send = (cur===v) ? 0 : v;   // click your current vote again to undo
+        box.querySelectorAll('button').forEach(function(b){b.disabled=true});
+        fetch(API+'/vote',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({slug:slug,vote:send,voter:voter})})
+          .then(function(r){return r.json()})
+          .then(function(d){ if(d&&typeof d.up==='number'){ setCounts(box,d); mark(box, d.myvote||0);} })
+          .catch(function(){})
+          .finally(function(){ box.querySelectorAll('button').forEach(function(b){b.disabled=false}); });
+      });
     });
   });
-});
+  // 3) text feedback
+  document.querySelectorAll('.fb').forEach(function(form){
+    var slug=form.getAttribute('data-slug');
+    var input=form.querySelector('.fbin'), msg=form.querySelector('.fbmsg');
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var text=(input.value||'').trim();
+      if(!text) return;
+      form.querySelector('.fbsend').disabled=true;
+      fetch(API+'/feedback',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({slug:slug,text:text,voter:voter})})
+        .then(function(r){return r.json()})
+        .then(function(d){ if(d&&d.ok){ input.value=''; msg.textContent='thanks — noted'; } else { msg.textContent='hmm, try again'; } })
+        .catch(function(){ msg.textContent='offline?'; })
+        .finally(function(){ form.querySelector('.fbsend').disabled=false; setTimeout(function(){msg.textContent='';},4000); });
+    });
+  });
+})();
 </script>
 </body>
 </html>
