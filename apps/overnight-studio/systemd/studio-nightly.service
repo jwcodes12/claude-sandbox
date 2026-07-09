@@ -7,10 +7,11 @@ Wants=network-online.target
 Type=oneshot
 User=studio
 Group=studio
-# Auth: CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` run as studio).
-EnvironmentFile=/home/studio/.config/studio/env
+WorkingDirectory=/home/studio
+# Auth: studio's own ~/.claude/.credentials.json (refreshes itself).
 ExecStart=/home/studio/bin/nightly.sh
 TimeoutStartSec=3600
 NoNewPrivileges=true
+PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/home/studio /srv/studio

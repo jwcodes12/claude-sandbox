@@ -10,10 +10,14 @@ are worth repeating.
 
 ## How it works (v0)
 
-Nightly (~02:30 ET) the pipeline runs `bin/nightly.py`:
+Nightly (~02:30 ET) the pipeline runs `bin/nightly.py`, **as the `studio` user**
+(scoped to `/home/studio` + `/srv/studio`, with its own `~/.claude` credentials):
 
+0. **Pick a kind** — rotate across `art-toy / article / game / site` (the least
+   recently built kind wins), gated by the night's level/energy budget, so the
+   studio alternates content types instead of only making toys.
 1. **Ideate** — a "creative director" prompt invents one concrete, single-file idea
-   for tonight's level/energy, avoiding recent builds.
+   of that kind, avoiding recent builds.
 2. **Build** — a "lead builder" prompt emits one self-contained `index.html`
    (inline CSS+JS, no network) to **stdout**. Tools are disabled, so the model
    can never touch the filesystem — the artifact is pure text we capture.
@@ -32,8 +36,8 @@ prompts; v1 forces a different *model* for the critic).
 | `/home/studio/bin/` | pipeline + vote service (private, `studio`-owned) |
 | `/home/studio/prompts/` | ideate / build / code-critic prompts |
 | `/home/studio/data/studio.sqlite` | scoreboard + votes (bandit, critics, runs) |
-| `/home/studio/config.json` | level ladder, cadence, model candidates (live/mutable) |
-| `/home/studio/.config/studio/env` | `CLAUDE_CODE_OAUTH_TOKEN` |
+| `/home/studio/config.json` | level ladder, cadence, kinds, model candidates (live/mutable) |
+| `/home/studio/.claude/.credentials.json` | studio's claude auth (copied from opc's account) |
 | `/srv/studio/gallery/index.html` | the gallery (nginx docroot, `httpd_sys_content_t`) |
 | `/srv/studio/sites/<slug>/` | each published build |
 
@@ -77,14 +81,10 @@ The URL scheme is `config.json → public` (`base:""` = served at the host root)
 ## Deploy / operate
 
 ```bash
-sudo ./deploy.sh                      # idempotent provision/update; leaves timer OFF
-# one-time, to go live nightly:
-sudo -u studio claude setup-token     # paste result into /home/studio/.config/studio/env
-sudo systemctl enable --now studio-nightly.timer
+sudo ./deploy.sh                          # idempotent provision/update; copies studio creds, leaves timer OFF
+sudo systemctl enable --now studio-nightly.timer   # go live nightly (~02:30 ET)
 
-# manual run (as studio):
-sudo -u studio STUDIO_HOME=/home/studio STUDIO_WEB=/srv/studio \
-     /home/studio/bin/nightly.sh
+sudo systemctl start studio-nightly.service        # manual run (logs in /home/studio/logs/)
 sudo -u studio python3 /home/studio/bin/nightly.py gallery   # rebuild gallery only
 ```
 
@@ -93,7 +93,7 @@ sudo -u studio python3 /home/studio/bin/nightly.py gallery   # rebuild gallery o
 - **v0 (this):** claude-only pipeline, code critic, gallery, votes, demo site zero.
 - **v1:** full council + critic panel — vision critic on screenshots (headless
   chromium, present at `/usr/bin/chromium-browser`), playtest critic; gemini/codex
-  authed as the studio user so the bandit has real model choices.
+  authed as the studio user (like claude is now) so the bandit has real model choices.
 - **v2:** critic trust-weighting vs John's votes, component harvest into
   `~/studio/lib/` on Sunday retros, digest-RSS announcements of new sites.
 

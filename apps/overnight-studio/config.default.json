@@ -29,15 +29,15 @@
     "1": {
       "name": "single-toy",
       "implemented": true,
-      "kinds": ["art-toy", "site"],
-      "desc": "One self-contained index.html + vanilla JS toy or micro-site. No build step.",
+      "kinds": ["art-toy", "article", "site"],
+      "desc": "One self-contained index.html — an art toy, a written article, or a micro-site. No build step.",
       "max_files": 3,
       "energy_cost": 1
     },
     "2": {
       "name": "interactive",
       "implemented": true,
-      "kinds": ["art-toy", "site", "game"],
+      "kinds": ["art-toy", "article", "site", "game"],
       "desc": "Multi-screen or stateful interaction; may split into a few JS modules.",
       "max_files": 6,
       "energy_cost": 2
@@ -45,7 +45,7 @@
     "3": {
       "name": "small-game",
       "implemented": true,
-      "kinds": ["game", "art-toy"],
+      "kinds": ["game", "art-toy", "article"],
       "desc": "A playable small game with a loop, score, and restart. Saturday territory.",
       "max_files": 10,
       "energy_cost": 3

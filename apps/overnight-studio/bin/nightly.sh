@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# systemd entrypoint for the nightly pipeline. Sets up the studio env, finds the
-# AI CLIs, and tees a dated log. Auth (CLAUDE_CODE_OAUTH_TOKEN) comes from the
-# EnvironmentFile in the unit.
+# systemd entrypoint for the nightly pipeline. Runs as the studio user, scoped to
+# /home/studio (state) and /srv/studio (published output). claude auth lives in
+# studio's own ~/.claude/.credentials.json. Sets paths, finds the AI CLIs, tees a
+# dated log. HOME is the service user's home so `claude` finds its auth.
 set -uo pipefail
 
 export STUDIO_HOME=/home/studio
 export STUDIO_WEB=/srv/studio
-export HOME=/home/studio
-# claude/gemini/codex may live in the studio user's ~/.local/bin or in linuxbrew.
-export PATH="/home/studio/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+# claude is the system-wide /usr/bin/claude; gemini (v1) is in linuxbrew.
+export PATH="/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 
 ts="$(date +%Y%m%d-%H%M%S)"
 mkdir -p /home/studio/logs

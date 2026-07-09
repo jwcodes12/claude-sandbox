@@ -268,6 +268,27 @@ def render_gallery(con):
 
 # ---------- pipeline ----------
 
+# What each content kind should be. Injected into ideate/build/critic so the
+# studio alternates between makes instead of only building toys.
+KIND_GUIDANCE = {
+    "art-toy": "an ART TOY — a delightful interactive visual the visitor pokes or drags and it responds; motion and feel matter most.",
+    "game": "a GAME — a real playable loop with a clear goal, scoring, a win/lose state, and a restart.",
+    "article": "an ARTICLE — a genuinely interesting, specific short written piece (~500-900 words), beautifully typeset (readable measure, headings, a pull-quote); no interaction needed, craft = writing quality + typography.",
+    "site": "a SITE — a small, focused single-purpose page that does one useful or charming thing well.",
+}
+
+
+def pick_kind(con, allowed):
+    """Rotate content types: pick the allowed kind that was built least recently
+    (unbuilt kinds first), so the studio alternates article/game/toy/site."""
+    recent = [r["kind"] for r in con.execute(
+        "SELECT kind FROM runs WHERE status='shipped' ORDER BY id DESC LIMIT 20")]
+
+    def staleness(k):
+        return recent.index(k) if k in recent else 10_000
+    return max(allowed, key=staleness)
+
+
 def recent_titles(con, n=8):
     return [r["title"] for r in con.execute(
         "SELECT title FROM runs WHERE status='shipped' ORDER BY id DESC LIMIT ?", (n,))]
@@ -294,13 +315,14 @@ def run_pipeline(dry=False):
 
     level = cfg["level"]
     ldef = cfg["levels"][str(level)]
-    kinds = ", ".join(ldef["kinds"])
+    target_kind = pick_kind(con, ldef["kinds"])
+    guidance = KIND_GUIDANCE.get(target_kind, target_kind)
 
-    # 1) IDEATE
+    # 1) IDEATE (kind is chosen by rotation, not left to the model)
     bmodel = select_model(con, "builder", cfg)
-    log(f"ideating (level {level} {ldef['name']}, energy {cad['name']}, builder={bmodel})")
+    log(f"ideating (level {level} {ldef['name']}, energy {cad['name']}, kind={target_kind}, builder={bmodel})")
     ok, out, fk = run_model(bmodel, read_prompt(
-        "ideate", level=level, level_desc=ldef["desc"], kinds=kinds,
+        "ideate", level=level, level_desc=ldef["desc"], kind=target_kind, kind_guidance=guidance,
         energy_name=cad["name"], recent=", ".join(recent_titles(con)) or "none"))
     if not ok:
         bandit_update(con, "builder", bmodel, "any", failure=fk)
@@ -312,7 +334,7 @@ def run_pipeline(dry=False):
     try:
         idea = extract_json(out)
         title = str(idea["title"])[:60]
-        kind = idea.get("kind", ldef["kinds"][0])
+        kind = target_kind  # rotation decides the kind, not the model
         pitch = str(idea.get("pitch", ""))[:280]
         slug = slugify(idea.get("slug_words", title), night)
     except Exception as e:
@@ -333,7 +355,7 @@ def run_pipeline(dry=False):
 
     # 2) BUILD
     log("building index.html")
-    ok, out, fk = run_model(bmodel, read_prompt("build", title=title, kind=kind, pitch=pitch))
+    ok, out, fk = run_model(bmodel, read_prompt("build", title=title, kind=kind, pitch=pitch, kind_guidance=guidance))
     if not ok:
         bandit_update(con, "builder", bmodel, kind, failure=fk)
         _finish_fail(con, run_id, f"build:{fk}")
@@ -358,7 +380,7 @@ def run_pipeline(dry=False):
     cmodel = select_model(con, "code-critic", cfg)
     log(f"code critic ({cmodel})")
     ok, out, fk = run_model(cmodel, read_prompt(
-        "code-critic", title=title, kind=kind, pitch=pitch,
+        "code-critic", title=title, kind=kind, pitch=pitch, kind_guidance=guidance,
         peers=peer_list(con), html=html[:120000]))
     score, ship, verdict = 0.5, True, "(critic unavailable)"
     if ok:

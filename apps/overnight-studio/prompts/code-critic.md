@@ -4,11 +4,13 @@ own merits AND comparatively against the peer set below. Scores are RELATIVE,
 never absolute: anchor to the peers.
 
 Tonight's build: "[[title]]" ([[kind]]) — [[pitch]]
+This is [[kind_guidance]]
 Peer set (previously shipped, best-known first): [[peers]]
 
-Judge on: does it actually run without errors; is the interaction real and
-finished (not a stub); is the code self-contained and honest (no external
-calls, no dead code pretending to work); mobile usability; and craft/polish.
+Judge on: does it actually run without errors; does it deliver on its kind —
+real and finished, not a stub (for an article, that means genuinely good writing
+and typography, not interaction); is the code self-contained and honest (no
+external calls, no dead code pretending to work); mobile usability; craft/polish.
 
 The full index.html follows between the markers.
 --- BEGIN index.html ---

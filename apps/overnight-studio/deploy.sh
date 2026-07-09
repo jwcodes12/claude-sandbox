@@ -37,12 +37,16 @@ sudo -u $U sqlite3 /home/studio/data/studio.sqlite \
    ('builder','claude','any'),('code-critic','claude','any');"
 
 echo "== env file placeholder =="
-if [ ! -f /home/studio/.config/studio/env ]; then
-  printf '# Set by: sudo -u studio claude setup-token\nCLAUDE_CODE_OAUTH_TOKEN=\n' \
-    > /home/studio/.config/studio/env
-  chown $U:$U /home/studio/.config/studio/env
-  chmod 600 /home/studio/.config/studio/env
-  echo "  wrote placeholder env (TOKEN empty — fill before enabling timer)"
+echo "== studio claude auth =="
+# studio runs the CLIs itself (system-wide /usr/bin/claude); it just needs its
+# own credentials. Reuse opc's account rather than a separate setup-token flow.
+install -d -o $U -g $U -m 700 /home/studio/.claude
+if [ ! -f /home/studio/.claude/.credentials.json ] && [ -f /home/opc/.claude/.credentials.json ]; then
+  install -o $U -g $U -m 600 /home/opc/.claude/.credentials.json /home/studio/.claude/.credentials.json
+  install -o $U -g $U -m 644 /home/opc/.claude/settings.json /home/studio/.claude/settings.json 2>/dev/null || true
+  echo "  copied opc claude credentials to studio"
+else
+  echo "  studio credentials already present"
 fi
 
 echo "== SELinux label for /srv/studio =="
@@ -75,7 +79,6 @@ systemctl enable --now studio-votes.service
 echo "  vote service:"; systemctl is-active studio-votes.service
 
 echo
-echo "DONE. Nightly timer is installed but NOT enabled."
-echo "To go live nightly:"
-echo "  sudo -u studio claude setup-token   # paste into /home/studio/.config/studio/env"
+echo "DONE. To enable nightly builds (~02:30 ET):"
 echo "  sudo systemctl enable --now studio-nightly.timer"
+echo "Manual run: sudo systemctl start studio-nightly.service  (logs in /home/studio/logs/)"

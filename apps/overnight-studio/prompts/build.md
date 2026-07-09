@@ -3,7 +3,7 @@ SINGLE self-contained `index.html` file.
 
 The brief:
   Title: [[title]]
-  Kind:  [[kind]]
+  Kind:  [[kind]] — this is [[kind_guidance]]
   Pitch: [[pitch]]
 
 Hard requirements:
