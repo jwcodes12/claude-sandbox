@@ -112,16 +112,12 @@ function playerLabel(p, isPossessive = false) {
 }
 
 function computeWinnerId(state) {
+    // Trust ONLY the engine's verdict. checkWinnerS is turn-gated by design
+    // (you win Monopoly Deal on your own turn), so a renderer-side "3 sets =
+    // winner" fallback declared off-turn winners the game hadn't — freezing a
+    // live game behind a false game-over overlay.
     if (state.winner != null) return state.winner;
     if (state.winnerId != null) return state.winnerId;
-    for (const p of state.players) {
-        let sets = 0;
-        for (const colorKey of Object.keys(p.properties || {})) {
-            const def = PROPERTIES[colorKey];
-            if (def && (p.properties[colorKey] || []).length >= def.count) sets++;
-        }
-        if (sets >= 3) return p.id;
-    }
     return null;
 }
 

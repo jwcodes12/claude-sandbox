@@ -1213,6 +1213,11 @@ function ensureModal() {
             }
             return;
         }
+        // Payment picker: backdrop taps must NOT dismiss — it only opens from
+        // the debt flow and there is no way to reopen it, so a stray tap left
+        // the player trapped owing with a frozen board. Explicit buttons only
+        // (same rule as the reaction prompt above).
+        if (modal.dataset.modalKind === 'payment' && e.target === modal) return;
         if (e.target === modal || e.target.dataset.action === 'close-modal') {
             modal.classList.add('hidden');
         }
