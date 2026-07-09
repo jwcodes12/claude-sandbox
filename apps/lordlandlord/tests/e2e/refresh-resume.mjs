@@ -57,12 +57,16 @@ async function main() {
     const browser = await chromium.launch();
     const errors = { A: [], B: [] };
 
-    async function newPage(tag) {
-        const context = await browser.newContext();
-        await context.route('https://fonts.googleapis.com/**', route =>
-            route.fulfill({ contentType: 'text/css', body: '' }));
-        await context.route('https://fonts.gstatic.com/**', route =>
-            route.fulfill({ contentType: 'font/woff2', body: '' }));
+    const contexts = {};
+    async function newPage(tag, contextTag = tag) {
+        const context = contexts[contextTag] || (contexts[contextTag] = await (async () => {
+            const c = await browser.newContext();
+            await c.route('https://fonts.googleapis.com/**', route =>
+                route.fulfill({ contentType: 'text/css', body: '' }));
+            await c.route('https://fonts.gstatic.com/**', route =>
+                route.fulfill({ contentType: 'font/woff2', body: '' }));
+            return c;
+        })());
         const page = await context.newPage();
         page.on('pageerror', e => errors[tag].push(`pageerror: ${e.message}`));
         page.on('console', m => { if (m.type() === 'error') errors[tag].push(`console.error: ${m.text()}`); });
@@ -195,8 +199,61 @@ async function main() {
     await playSteps(3);
     await assertConverged('scenario 2 (post-blip play)');
 
+    // ---- scenario 3: second tab steals the seat (displacement must not ping-pong)
+    console.log('scenario 3: opening a second tab in B\'s browser profile');
+    errors.B2 = [];
+    const pageB2 = await newPage('B2', 'B');   // same context as B → shared localStorage
+    // The new tab auto-resumes the stored seat, displacing the old tab.
+    await pageB2.waitForFunction(() => !!window.__llNet, null, { timeout: 20000 });
+    const seatB2 = await pageB2.evaluate(() => window.__llNet.seat);
+    if (seatB2 !== 1) fail(`scenario 3: second tab got seat ${seatB2}, expected 1`);
+
+    // Old tab must YIELD: show the displaced banner and stop reconnecting —
+    // an auto-rejoin here would displace the new tab straight back (ping-pong).
+    await waitFor(async () => {
+        const txt = await pageB.evaluate(() => {
+            const el = document.getElementById('net-status-banner');
+            return el && !el.classList.contains('hidden') ? el.textContent : '';
+        });
+        return txt.includes('another tab');
+    }, 15000, 'old tab to show the displaced banner');
+
+    // New tab stays bound and the game keeps moving (drive via A + B2).
+    const pageBySeat2 = { 0: pageA, 1: pageB2 };
+    const v0 = await pageB2.evaluate(() => window.__llNet.version());
+    for (let i = 0; i < 3; i++) {
+        const st = await pageA.evaluate(() => {
+            const s = window.__llNet.getState();
+            return { turn: s.turn, version: s.version, winner: s.winner, pending: !!s.pendingAction };
+        });
+        if (st.winner != null) break;
+        const acting = st.pending ? pageA : (pageBySeat2[st.turn] || pageA);
+        await acting.evaluate(() => {
+            const a = window.__llNet.chooseAuto()
+                || window.__llNet.legal().find(x => x.type === 'end-turn');
+            if (a) window.__llNet.submit(a);
+        });
+        await waitFor(async () =>
+            (await pageA.evaluate(() => window.__llNet.version())) > st.version, 6000, null);
+    }
+    await waitFor(async () => {
+        const [vA, vB2] = await Promise.all([
+            pageA.evaluate(() => window.__llNet.version()),
+            pageB2.evaluate(() => window.__llNet.version())
+        ]);
+        return vA === vB2 && vA > v0;
+    }, 15000, 'scenario 3: game to keep advancing on the new tab');
+    // And the displaced tab must still be quiet (no rejoin flap on B2).
+    await new Promise(r => setTimeout(r, 2500));
+    const stillDisplaced = await pageB.evaluate(() => {
+        const el = document.getElementById('net-status-banner');
+        return el && !el.classList.contains('hidden');
+    });
+    if (!stillDisplaced) fail('scenario 3: displaced tab resumed reconnecting (ping-pong risk)');
+    console.log('scenario 3: displacement yielded cleanly, game continued on new tab');
+
     // ---- hygiene ----------------------------------------------------------------
-    for (const tag of ['A', 'B']) {
+    for (const tag of Object.keys(errors)) {
         if (errors[tag].length) {
             for (const e of errors[tag]) console.error(`page ${tag}: ${e}`);
             fail(`page ${tag} logged ${errors[tag].length} error(s)`);
@@ -206,7 +263,7 @@ async function main() {
     await browser.close();
     await gameServer.close();
     await new Promise(r => httpServer.close(r));
-    console.log('\nE2E PASS: refresh-resume and blip-resume both converged with banner UX.');
+    console.log('\nE2E PASS: refresh-resume, blip-resume, and tab-displacement all clean.');
 }
 
 main().then(

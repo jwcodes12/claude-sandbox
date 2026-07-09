@@ -174,6 +174,43 @@ describe('room lifecycle', () => {
         expect((await c.next('err')).code).toBe('bad-room');
     });
 
+    // Pre-start compaction shifts seat indices; a player who was offline at
+    // that moment still holds the old index. The token is the identity — the
+    // server must find it at its NEW seat instead of rejecting the rejoin.
+    it('rejoins by token after pre-start compaction moved the seat', async () => {
+        const server = await boot();
+        const a = await connect(server.port);
+        a.send({ t: 'create', name: 'Alice' });
+        const ja = await a.next('joined');
+        const b = await connect(server.port);
+        b.send({ t: 'join', roomId: ja.roomId, name: 'Bob' });
+        await b.next('joined');
+        const c = await connect(server.port);
+        c.send({ t: 'join', roomId: ja.roomId, name: 'Cara' });
+        const jc = await c.next('joined');
+        expect(jc.seat).toBe(2);
+
+        b.send({ t: 'leave' });                        // hole at seat 1
+        c.sock.terminate();                            // Cara offline at start time
+        await c.closed;
+        await waitFor(() => {
+            const r = server.getRoom(ja.roomId);
+            return r && r.seats[1] === null;
+        }, 2000, 'seat 1 freed');
+
+        a.send({ t: 'start' });                        // compacts to [Alice, Cara]
+        await a.next('started');
+
+        // Cara comes back with her OLD seat index but her valid token.
+        const c2 = await connect(server.port);
+        c2.send({ t: 'rejoin', roomId: ja.roomId, seat: 2, seatToken: jc.seatToken });
+        const j2 = await c2.next('joined');
+        expect(j2.seat).toBe(1);                       // rebound at the compacted seat
+        expect(j2.started).toBe(true);
+        const restart = await c2.next('started');      // can rebuild v0 and resume
+        expect(typeof restart.seed).toBe('number');
+    });
+
     it('rejoin with a wrong token is rejected with bad-token', async () => {
         const server = await boot();
         const a = await connect(server.port);

@@ -36,7 +36,7 @@ export function createWsSession({ url }) {
     const outbox = [];                  // frames queued while the socket is not open
 
     const listeners = {
-        joined: [], room: [], started: [], error: [], status: [], rejoined: []
+        joined: [], room: [], started: [], error: [], status: [], rejoined: [], displaced: []
     };
     let gameCb = null;                  // channel onMessage (net/client.js)
     const afterCbs = [];                // channel afterMessage hooks
@@ -115,9 +115,20 @@ export function createWsSession({ url }) {
         };
         ws.onmessage = (ev) => handleFrame(ev.data);
         ws.onerror = () => { /* 'close' always follows; reconnect handles it */ };
-        ws.onclose = () => {
+        ws.onclose = (ev) => {
             ws = null;
             if (manualClose) { setStatus('closed'); return; }
+            if (ev && ev.code === 4001) {
+                // Server displaced this connection: the seat was rebound by
+                // another tab/device with the same token. Auto-rejoining here
+                // would displace THAT one right back — a ~500ms ping-pong where
+                // both tabs flap and submits vanish. This socket must yield.
+                manualClose = true;
+                creds = null;
+                setStatus('closed');
+                emit('displaced');
+                return;
+            }
             setStatus('reconnecting');
             const delay = backoffMs;
             backoffMs = Math.min(backoffMs * 2, BACKOFF_MAX_MS);
@@ -165,6 +176,7 @@ export function createWsSession({ url }) {
         onError: on('error'),
         onStatus: on('status'),
         onRejoined: on('rejoined'),
+        onDisplaced: on('displaced'),
 
         // ---- game channel + introspection ----
         channel() { return channelObj; },

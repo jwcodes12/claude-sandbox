@@ -220,18 +220,36 @@ function ensureNetSession() {
     });
     netSession.onStarted(handleNetStarted);
     netSession.onRejoined(() => {
-        // Post-start rebind: ask the writer for a catch-up snapshot.
+        // Post-start rebind: ask the writer for a catch-up snapshot. The
+        // auto-end-turn guard must forget its pre-disconnect version, or an
+        // end-turn frame lost in flight is never re-submitted (soft stall).
+        _netAutoEndVersion = -1;
         if (activeNetGame) activeNetGame.client.reconnect();
         hideNetBanner('net-status-banner');
     });
+    netSession.onDisplaced(() => {
+        // Another tab/device rebound this seat with the same token; this page
+        // yielded (no auto-rejoin — that would ping-pong the displacement).
+        showNetBanner('net-status-banner', '⚠ This seat is now played in another tab or device.');
+    });
     netSession.onError((err) => {
+        const sessionDead = err.code === 'bad-room' || err.code === 'bad-token';
         // A dead stored session (room reaped, token stale) must not wedge the
         // splash behind a "reconnecting" banner forever.
-        if (netResuming && (err.code === 'bad-room' || err.code === 'bad-token')) {
+        if (netResuming && sessionDead) {
             netResuming = false;
             clearNetSession();
             hideNetBanner('net-status-banner');
             flashHint('Your previous realm has ended.');
+            return;
+        }
+        // Mid-game rejoin rejected (server restarted / room reaped): the realm
+        // is unrecoverable — clear the session and reload to the splash rather
+        // than leaving a frozen board behind a stuck reconnecting banner.
+        if (activeNetGame && sessionDead) {
+            clearNetSession();
+            showNetBanner('net-status-banner', '⚠ The realm is gone — returning to the castle gate…');
+            setTimeout(() => location.reload(), 1800);
             return;
         }
         flashHint(err.message || err.code || 'Realm error.');
@@ -265,8 +283,20 @@ function tryResumeStoredSession() {
     return true;
 }
 
+// An explicit Create/Join always wins over an in-flight stored-session resume;
+// otherwise the resume's 'joined' lands first, the server answers the create
+// with "already in a room", and the user is silently dumped into the OLD room.
+function cancelPendingResume() {
+    if (!netResuming) return;
+    netResuming = false;
+    hideNetBanner('net-status-banner');
+    clearNetSession();
+    if (netSession) netSession.leave();   // unbind whatever the resume grabbed
+}
+
 function onCreateRealm() {
     activeLocalGame = null;
+    cancelPendingResume();
     const name = (document.getElementById('player-name-create')?.value || '').trim() || 'Host';
     ensureNetSession().create(name);
 }
@@ -278,6 +308,7 @@ function onJoinRealm() {
         flashHint('Enter the Realm ID to join.');
         return;
     }
+    cancelPendingResume();
     const name = (document.getElementById('player-name-join')?.value || '').trim() || `Lord ${Date.now() % 100}`;
     ensureNetSession().join(code, name);
 }
@@ -852,10 +883,21 @@ function onEndTurn() {
     }
 }
 
+// The game can end in the same Accepted frame that settles someone ELSE's
+// chain while our reaction/payment modal is still up — drop the dead modal so
+// it doesn't sit on top of the game-over screen.
+function dismissStaleActionModal() {
+    const m = document.getElementById('info-modal');
+    if (m && !m.classList.contains('hidden') &&
+        (m.dataset.modalKind === 'reaction' || m.dataset.modalKind === 'payment')) {
+        hideModal();
+    }
+}
+
 function scheduleReactionHandling() {
     if (activeNetGame) {
         syncGameStateFromNet();
-        if (gameState._gameOver) return;
+        if (gameState._gameOver) { dismissStaleActionModal(); return; }
         if (gameState.pendingAction === null) {
             // A remote resolution can settle the chain while our reaction
             // prompt is still up — drop it.
@@ -876,7 +918,7 @@ function scheduleReactionHandling() {
     }
     if (isSoloControllerActive()) {
         syncGameStateFromController();
-        if (gameState._gameOver) return;
+        if (gameState._gameOver) { dismissStaleActionModal(); return; }
         if (gameState.pendingAction === null) return;
         const modal = document.getElementById('info-modal');
         if (modal && !modal.classList.contains('hidden') && modal.dataset.modalKind === 'payment') {

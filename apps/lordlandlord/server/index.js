@@ -240,9 +240,17 @@ export async function createGameServer(opts = {}) {
         if (conn.room) return sendErr(ws, 'bad-frame', 'already in a room');
         const room = rooms.get(msg.roomId);
         if (!room) return sendErr(ws, 'bad-room', 'no such room');
-        const entry = room.seats[msg.seat];
-        if (!entry || entry.isBot || !msg.seatToken || entry.token !== msg.seatToken) {
-            return sendErr(ws, 'bad-token', 'seat token mismatch');
+        if (!msg.seatToken) return sendErr(ws, 'bad-token', 'seat token mismatch');
+        let seat = msg.seat;
+        let entry = room.seats[seat];
+        if (!entry || entry.isBot || entry.token !== msg.seatToken) {
+            // Seat indices shift when pre-start compaction closes leave-holes,
+            // and a player who was offline at that moment still holds the OLD
+            // index. The token is the identity — find it before rejecting, so
+            // that player is not permanently orphaned.
+            seat = room.seats.findIndex(s => s && !s.isBot && s.token === msg.seatToken);
+            entry = seat >= 0 ? room.seats[seat] : null;
+            if (!entry) return sendErr(ws, 'bad-token', 'seat token mismatch');
         }
         // Displace any previous socket on this seat (refresh / zombie tab).
         if (entry.ws && entry.ws !== ws) {
@@ -250,7 +258,7 @@ export async function createGameServer(opts = {}) {
             if (old) { old.room = null; old.seat = null; }
             entry.ws.close(4001, 'displaced');
         }
-        bindSeat(ws, conn, room, msg.seat, entry);
+        bindSeat(ws, conn, room, seat, entry);
     }
 
     function freeSeat(room) {
