@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = '/tmp/ll-promo/cards';
 fs.mkdirSync(OUT, { recursive: true });
 
-const DURATIONS = { 1: 6000, 2: 13000, 3: 8000, 4: 10000, 5: 9500, 6: 7000 };
+const DURATIONS = { 1: 9600, 2: 17200, 3: 11900, 4: 10900, 5: 14900, 6: 9700 };
 const NAMES = { 1: 'intro', 2: 'roast', 3: 'rebuild', 4: 'receipts', 5: 'names', 6: 'outro' };
 
 const browser = await chromium.launch();

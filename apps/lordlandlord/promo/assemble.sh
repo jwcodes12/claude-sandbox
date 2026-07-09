@@ -11,11 +11,12 @@ BG=0x241609
 CAP=$D/captions
 ENC="-r 30 -c:v libx264 -preset medium -crf 22 -pix_fmt yuv420p -an"
 
-# ---- card segments (already 1280x720) ----------------------------------------
+# ---- card segments (already 1280x720; pinned to the sung-line timeline) --------
+CARD_T=(8.5 16.1 10.8 9.8 13.8 8.6)
 i=0
 for f in "$D"/cards/0*.webm; do
   i=$((i+1))
-  ffmpeg -y -v error -ss 0.5 -i "$f" -vf "scale=1280:720,setsar=1" $ENC "$SEG/c$i.mp4"
+  ffmpeg -y -v error -ss 0.5 -i "$f" -t "${CARD_T[$((i-1))]}" -vf "scale=1280:720,setsar=1" $ENC "$SEG/c$i.mp4"
 done
 
 # ---- footage: side-by-side lobby+play (1.5s - 17.5s) ---------------------------
@@ -39,7 +40,7 @@ ffmpeg -y -v error \
   -ss 17.9 -to 23.0 -i "$D/clips/B.webm" \
   -i "$CAP/refresh.png" \
   -filter_complex "\
-    [1:v]scale=-2:720,setsar=1[b];\
+    [1:v]scale=-2:720,setsar=1,setpts=PTS*1.176[b];\
     [0:v][b]overlay=460:0:shortest=1[t1];\
     [t1][2:v]overlay=0:576[v]" \
   -map "[v]" $ENC "$SEG/f2.mp4"
@@ -51,8 +52,8 @@ ffmpeg -y -v error \
   -ss 23.2 -to 28.4 -i "$D/clips/B.webm" \
   -i "$CAP/heal.png" \
   -filter_complex "\
-    [1:v]scale=-2:720,setsar=1[a];\
-    [2:v]scale=-2:720,setsar=1[b];\
+    [1:v]scale=-2:720,setsar=1,setpts=PTS*1.115[a];\
+    [2:v]scale=-2:720,setsar=1,setpts=PTS*1.115[b];\
     [0:v][a]overlay=260:0:shortest=1[t1];\
     [t1][b]overlay=660:0[t2];\
     [t2][3:v]overlay=0:576[v]" \
