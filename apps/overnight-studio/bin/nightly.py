@@ -16,6 +16,7 @@ Usage:
 """
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -37,7 +38,7 @@ SITES = WEB / "sites"
 GALLERY = WEB / "gallery"
 CONFIG = HOME / "config.json"
 DOMAIN = "studio.johnwatkinscodes.work"
-CLAUDE_TIMEOUT = int(os.environ.get("STUDIO_CLAUDE_TIMEOUT", "600"))
+CLAUDE_TIMEOUT = int(os.environ.get("STUDIO_CLAUDE_TIMEOUT", "300"))
 
 
 # ---------- helpers ----------
@@ -97,28 +98,46 @@ def read_prompt(name, **kw):
 
 # ---------- model dispatch (v0: claude only; bandit-ready) ----------
 
-def select_model(con, role, cfg):
-    """Epsilon-greedy over configured candidates. Reviewer!=builder is enforced
-    by config (v0 lists claude for both; v1 adds gemini/codex)."""
-    cands = cfg["models"].get(role, ["claude"])
+def select_model(con, role, cfg, kind="any", exclude=None):
+    """Pick a model for (role, kind) with epsilon-greedy exploration over the
+    PER-KIND scoreboard. So the studio keeps trying alternatives and learns e.g.
+    that codex makes better art toys while claude writes better articles, routing
+    each kind to whatever scores best per cost. Critic selection passes
+    exclude=<builder> so the reviewer is never the builder's model."""
+    cands = [m for m in cfg["models"].get(role, ["claude"]) if m != exclude]
+    if not cands:
+        return None
     if len(cands) == 1:
         return cands[0]
-    rows = {r["model"]: r for r in con.execute(
-        "SELECT model,trials,reward_sum,failures FROM model_stats WHERE role=?",
-        (role,))}
-    # explore any unseen candidate first
-    for m in cands:
-        if m not in rows or rows[m]["trials"] == 0:
-            return m
-    # else exploit best reward-per-cost, penalizing failures (prefers a model
-    # that's ~as good but cheaper; only picks a pricier one when clearly better)
+    rows = {(r["model"], r["output_type"]): r for r in con.execute(
+        "SELECT model,output_type,trials,reward_sum,failures FROM model_stats WHERE role=?", (role,))}
     costs = cfg.get("model_cost", {})
 
     def value(m):
-        r = rows[m]
-        quality = (r["reward_sum"] - 0.5 * r["failures"]) / max(1, r["trials"])
-        return quality / max(0.05, costs.get(m, 1.0))
-    return max(cands, key=value)
+        r = rows.get((m, kind))
+        if r and r["trials"] > 0:                     # per-kind stats if we have them
+            q = (r["reward_sum"] - 0.5 * r["failures"]) / r["trials"]
+        else:                                         # else this model's cross-kind average
+            t = sum(x["trials"] for (mm, _), x in rows.items() if mm == m)
+            if t == 0:
+                return None
+            s = sum(x["reward_sum"] for (mm, _), x in rows.items() if mm == m)
+            f = sum(x["failures"] for (mm, _), x in rows.items() if mm == m)
+            q = (s - 0.5 * f) / t
+        return q / max(0.05, costs.get(m, 1.0))
+
+    # 1) always try a (model, kind) pairing we've never tested
+    untried = [m for m in cands if rows.get((m, kind), {"trials": 0})["trials"] == 0]
+    if untried:
+        return random.choice(untried)
+    # 2) keep exploring with a decaying probability (explore early, exploit later)
+    seen = sum(rows[(m, kind)]["trials"] for m in cands if (m, kind) in rows)
+    if random.random() < max(0.12, 0.6 / (1 + seen)):
+        return random.choice(cands)
+    # 3) exploit: best quality-per-cost for this kind
+    scored = [(m, value(m)) for m in cands]
+    scored = [(m, v) for m, v in scored if v is not None]
+    return max(scored, key=lambda x: x[1])[0] if scored else random.choice(cands)
 
 
 # Force pure text generation: the builder/critic must return the artifact on
@@ -200,6 +219,21 @@ def screenshot(html_path, out_path, w=900, h=650, timeout=60):
         return os.path.exists(out_path) and os.path.getsize(out_path) > 0
     except Exception:
         return False
+
+
+def run_model_retry(model, prompt, tries=2, timeout=CLAUDE_TIMEOUT):
+    """run_model with a retry on transient failures (timeout/quota/error) — a
+    single stalled call shouldn't lose the whole night. Auth failures don't retry."""
+    import time
+    ok, out, fk = False, "", "error"
+    for i in range(tries):
+        ok, out, fk = run_model(model, prompt, timeout=timeout)
+        if ok or fk == "auth":
+            break
+        if i < tries - 1:
+            log(f"  {model} {fk}; retrying…")
+            time.sleep(5)
+    return ok, out, fk
 
 
 def bandit_update(con, role, model, output_type, reward=None, failure=None):
@@ -378,14 +412,14 @@ def run_pipeline(dry=False):
     target_kind = pick_kind(con, ldef["kinds"])
     guidance = KIND_GUIDANCE.get(target_kind, target_kind)
 
-    # 1) IDEATE (kind is chosen by rotation, not left to the model)
-    bmodel = select_model(con, "builder", cfg)
+    # 1) IDEATE (kind is chosen by rotation; builder is routed per-kind)
+    bmodel = select_model(con, "builder", cfg, target_kind)
     log(f"ideating (level {level} {ldef['name']}, energy {cad['name']}, kind={target_kind}, builder={bmodel})")
-    ok, out, fk = run_model(bmodel, read_prompt(
+    ok, out, fk = run_model_retry(bmodel, read_prompt(
         "ideate", level=level, level_desc=ldef["desc"], kind=target_kind, kind_guidance=guidance,
         energy_name=cad["name"], recent=", ".join(recent_titles(con)) or "none"))
     if not ok:
-        bandit_update(con, "builder", bmodel, "any", failure=fk)
+        bandit_update(con, "builder", bmodel, target_kind, failure=fk)
         event(con, fk or "error", f"ideate failed: {fk}")
         log(f"IDEATE FAILED ({fk}); aborting.")
         _record_fail(con, night, level, bmodel, f"ideate:{fk}")
@@ -415,7 +449,7 @@ def run_pipeline(dry=False):
 
     # 2) BUILD
     log("building index.html")
-    ok, out, fk = run_model(bmodel, read_prompt("build", title=title, kind=kind, pitch=pitch, kind_guidance=guidance))
+    ok, out, fk = run_model_retry(bmodel, read_prompt("build", title=title, kind=kind, pitch=pitch, kind_guidance=guidance))
     if not ok:
         bandit_update(con, "builder", bmodel, kind, failure=fk)
         _finish_fail(con, run_id, f"build:{fk}")
@@ -436,8 +470,8 @@ def run_pipeline(dry=False):
     os.chmod(site_dir / "index.html", 0o644)
     log(f"wrote {site_dir/'index.html'} ({len(html)} bytes)")
 
-    # 3) CODE CRITIC (distinct role/prompt)
-    cmodel = select_model(con, "code-critic", cfg)
+    # 3) CODE CRITIC (distinct model from the builder)
+    cmodel = select_model(con, "code-critic", cfg, kind, exclude=bmodel)
     log(f"code critic ({cmodel})")
     ok, out, fk = run_model(cmodel, read_prompt(
         "code-critic", title=title, kind=kind, pitch=pitch, kind_guidance=guidance,
@@ -461,11 +495,14 @@ def run_pipeline(dry=False):
         bandit_update(con, "code-critic", cmodel, kind, failure=fk)
         event(con, fk or "error", f"critic failed: {fk}", run_id)
 
-    # 3b) VISION CRITIC — screenshot the page, judge how it LOOKS (gemini, distinct
-    #     model from the claude builder). Supplementary signal; doesn't gate ship.
+    # 3b) VISION CRITIC — screenshot the page, judge how it LOOKS (gemini vision,
+    #     must differ from the builder). Supplementary signal; doesn't gate ship.
+    vmodel = select_model(con, "vision-critic", cfg, kind, exclude=bmodel)
     shot = f"/tmp/studio-{slug}.png"
-    if screenshot(str(site_dir / "index.html"), shot):
-        log("vision critic (gemini)")
+    if not vmodel:
+        log("vision critic skipped (builder is the vision model)")
+    elif screenshot(str(site_dir / "index.html"), shot):
+        log(f"vision critic ({vmodel})")
         vok, vout, vfk = gemini_generate(read_prompt(
             "vision-critic", title=title, kind=kind, kind_guidance=guidance,
             peers=peer_list(con)), image_path=shot)
@@ -492,8 +529,11 @@ def run_pipeline(dry=False):
     else:
         event(con, "error", "screenshot failed", run_id)
 
-    # 4) SHIP DECISION + record
-    bandit_update(con, "builder", bmodel, kind, reward=(score if ship else 0.0))
+    # 4) SHIP DECISION + record. Builder reward = quality gate = average of the
+    #    night's critic scores (code + vision) if shipped, else 0.
+    avg = con.execute("SELECT AVG(score) FROM critic_scores WHERE run_id=?", (run_id,)).fetchone()[0]
+    builder_reward = (avg if avg is not None else score) if ship else 0.0
+    bandit_update(con, "builder", bmodel, kind, reward=builder_reward)
     if ship:
         con.execute("UPDATE runs SET status='shipped', shipped_at=datetime('now') WHERE id=?", (run_id,))
         con.commit()

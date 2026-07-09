@@ -52,9 +52,9 @@
     }
   },
   "models": {
-    "_comment": "Candidate models per role. The bandit picks among these; critic must differ from the builder. builder=claude; critics=gemini (via the Gemini API). Add codex once authed as the studio user.",
-    "builder": ["claude"],
-    "code-critic": ["gemini"],
+    "_comment": "Candidate models per role. The per-kind bandit explores/exploits among these; critic is chosen to differ from the builder. Builders COMPETE per kind (claude vs gemini now; add 'codex' here once authed and it'll join the competition for art toys etc.). code-critic lists both so a non-builder is always available.",
+    "builder": ["claude", "gemini"],
+    "code-critic": ["claude", "gemini"],
     "vision-critic": ["gemini"],
     "playtest-critic": ["gemini"]
   },

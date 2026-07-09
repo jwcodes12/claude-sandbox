@@ -30,10 +30,17 @@ Nightly (~02:30 ET) the pipeline runs `bin/nightly.py`, **as the `studio` user**
    the site is written to `/srv/studio/sites/<slug>/`; the gallery is regenerated
    (badge = average critic score).
 
-Reviewer ≠ builder is a hard rule and now enforced by **model**: builder = claude,
-critics = gemini (via the Gemini API). Model choice per role is a cost-aware
-bandit — reward is quality-per-`model_cost`, so it favors a model that's ~as good
-but cheaper and only reaches for a pricier one when clearly better.
+**Per-kind model competition.** `select_model(role, kind, exclude)` is an
+epsilon-greedy bandit over the *per-kind* scoreboard: it tries untried
+(model, kind) pairings, keeps a decaying chance of random exploration, then
+exploits the best **quality-per-`model_cost`** for that kind. So builders compete
+*per content type* — the studio can learn that (say) codex makes better art toys
+while claude writes better articles, and route each kind accordingly, favoring a
+model that's ~as good but cheaper. Builder reward = the night's average critic
+score (the quality gate); John's votes are the eventual ground truth. Reviewer ≠
+builder is enforced dynamically: the critic is chosen with `exclude=<builder>`
+(builders: claude, gemini now — add `codex` to `config.models.builder` once it's
+authed for studio and it joins the competition; critics: gemini + claude).
 
 ## Layout
 
