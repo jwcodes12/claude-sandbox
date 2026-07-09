@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(212,175,55,0.10), transparent 55%),
+      radial-gradient(ellipse at 75% 85%, rgba(139,90,43,0.20), transparent 60%),
+      linear-gradient(160deg, #2a1c12 0%, #1c120a 55%, #241609 100%);
+    color: #f0e2c4;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card { width: 1100px; text-align: center; }
+  .rule {
+    width: 320px; height: 2px; margin: 26px auto;
+    background: linear-gradient(90deg, transparent, #d4af37, transparent);
+  }
+  h1 { font-size: 92px; letter-spacing: 6px; color: #d4af37; text-shadow: 0 4px 18px rgba(0,0,0,0.7); }
+  h2 { font-size: 54px; color: #e8d49a; }
+  .sub { font-size: 34px; color: #cbb27f; font-style: italic; }
+  .big { font-size: 44px; line-height: 1.5; }
+  .names { font-size: 40px; color: #e8d49a; letter-spacing: 2px; }
+  .gold { color: #d4af37; }
+  .strike { color: #b3541e; }
+
+  .fade-in { opacity: 0; animation: fadeUp 0.9s ease-out forwards; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+  .d1 { animation-delay: 0.2s } .d2 { animation-delay: 1.0s } .d3 { animation-delay: 1.8s }
+  .d4 { animation-delay: 2.6s } .d5 { animation-delay: 3.4s } .d6 { animation-delay: 4.2s }
+  .d7 { animation-delay: 5.0s } .d8 { animation-delay: 5.8s } .d9 { animation-delay: 6.6s }
+  .d10 { animation-delay: 7.6s } .d11 { animation-delay: 8.8s } .d12 { animation-delay: 10.2s }
+
+  .roast-line { font-size: 46px; line-height: 1.75; text-align: left; padding-left: 130px; }
+  .roast-line b { color: #ff9d6b; font-weight: normal; }
+
+  .stats { display: flex; justify-content: center; gap: 70px; margin: 34px 0; }
+  .stat  { text-align: center; }
+  .stat .num { font-size: 96px; color: #d4af37; font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 26px; color: #cbb27f; margin-top: 6px; }
+
+  .friend { font-size: 41px; line-height: 1.85; text-align: left; padding-left: 150px; }
+  .friend b { color: #d4af37; font-weight: normal; letter-spacing: 1px; }
+
+  .url { font-size: 58px; color: #d4af37; letter-spacing: 1px; text-shadow: 0 4px 18px rgba(0,0,0,0.8); }
+  .crown { font-size: 110px; display: block; margin-bottom: 8px; filter: drop-shadow(0 6px 14px rgba(0,0,0,0.6)); }
+</style>
+</head>
+<body>
+<div id="root" class="card"></div>
+<script>
+const CARDS = {
+  1: `
+    <span class="crown fade-in d1">♛</span>
+    <h1 class="fade-in d1">LORD LANDLORD</h1>
+    <div class="rule fade-in d2"></div>
+    <div class="names fade-in d2">a royal decree for<br><span class="gold">Walta · Rahat · Eddie · Tunji · Adam</span></div>
+    <div class="rule fade-in d3"></div>
+    <div class="sub fade-in d3">regarding the game that betrayed us all</div>
+  `,
+  2: `
+    <h2 class="fade-in d1">Remember the old realm?</h2>
+    <div class="rule fade-in d1"></div>
+    <div class="roast-line fade-in d2">Your turn… <b>skipped.</b></div>
+    <div class="roast-line fade-in d4">Your card… <b>snapped back.</b></div>
+    <div class="roast-line fade-in d6">Your JUST SAY NO… <b>eaten.</b></div>
+    <div class="roast-line fade-in d8">One bad wifi <b>froze the whole kingdom.</b></div>
+    <div class="roast-line fade-in d10">One refresh <b>ended it forever.</b></div>
+  `,
+  3: `
+    <h2 class="fade-in d1">So it was burned down</h2>
+    <h2 class="fade-in d2">and rebuilt.</h2>
+    <div class="rule fade-in d3"></div>
+    <div class="big fade-in d4">One royal server holds the ledger.<br>
+    Every move <span class="gold">sealed &amp; versioned</span>.<br>
+    Your phone is just a mirror.</div>
+  `,
+  4: `
+    <h2 class="fade-in d1">The receipts.</h2>
+    <div class="stats">
+      <div class="stat fade-in d2"><div class="num" data-count="221">0</div><div class="lbl">automated trials</div></div>
+      <div class="stat fade-in d3"><div class="num" data-count="90">0</div><div class="lbl">simulated network disasters</div></div>
+      <div class="stat fade-in d4"><div class="num" data-count="6">0</div><div class="lbl">chaos gauntlets</div></div>
+      <div class="stat fade-in d5"><div class="num gold" data-count="0">0</div><div class="lbl">desyncs</div></div>
+    </div>
+    <div class="rule fade-in d6"></div>
+    <div class="sub fade-in d6">refresh rejoins your seat · disconnects heal themselves</div>
+  `,
+  5: `
+    <div class="friend fade-in d1"><b>WALTA</b> — yes, on your phone.</div>
+    <div class="friend fade-in d2"><b>RAHAT</b> — refresh mid-turn. we dare you.</div>
+    <div class="friend fade-in d4"><b>EDDIE</b> — your wifi is no longer a group problem.</div>
+    <div class="friend fade-in d6"><b>TUNJI</b> — mash the button. it charges once.</div>
+    <div class="friend fade-in d8"><b>ADAM</b> — even on cellular.</div>
+  `,
+  6: `
+    <span class="crown fade-in d1">⚔️</span>
+    <div class="url fade-in d1">landlord.johnwatkinscodes.work</div>
+    <div class="rule fade-in d2"></div>
+    <h2 class="fade-in d2">bring your worst wifi.</h2>
+    <div class="sub fade-in d3">no installs · share the realm link · the ledger remembers</div>
+  `,
+};
+const n = new URLSearchParams(location.search).get('card') || '1';
+document.getElementById('root').innerHTML = CARDS[n] || CARDS[1];
+// count-up stats (card 4)
+document.querySelectorAll('[data-count]').forEach((el, i) => {
+  const target = Number(el.dataset.count);
+  const t0 = performance.now() + 900 + i * 700;
+  const dur = 1400;
+  function tick(now) {
+    if (now < t0) return requestAnimationFrame(tick);
+    const p = Math.min(1, (now - t0) / dur);
+    el.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+});
+</script>
+</body>
+</html>
