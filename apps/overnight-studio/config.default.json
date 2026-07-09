@@ -52,11 +52,17 @@
     }
   },
   "models": {
-    "_comment": "Candidate CLIs per role. The bandit picks among these; reviewer/critic must differ from the builder. v0 uses claude as builder + a claude code-critic with a distinct role prompt; v1 adds gemini/codex once authed as the studio user.",
+    "_comment": "Candidate models per role. The bandit picks among these; critic must differ from the builder. builder=claude; critics=gemini (via the Gemini API). Add codex once authed as the studio user.",
     "builder": ["claude"],
-    "code-critic": ["claude"],
-    "vision-critic": ["claude"],
-    "playtest-critic": ["claude"]
+    "code-critic": ["gemini"],
+    "vision-critic": ["gemini"],
+    "playtest-critic": ["gemini"]
+  },
+  "model_cost": {
+    "_comment": "Relative $/call hint. The bandit reward is quality-per-cost, so it prefers a model that's ~as good but cheaper, and only reaches for a pricier one when clearly better. Seed from reputable benchmarks/pricing.",
+    "claude": 1.0,
+    "gemini": 0.12,
+    "codex": 0.8
   },
   "retro": {
     "promote_if": "all runs shipped AND peak budget < 0.70 AND zero failures over the week",

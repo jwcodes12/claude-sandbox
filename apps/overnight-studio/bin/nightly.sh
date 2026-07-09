@@ -7,8 +7,10 @@ set -uo pipefail
 
 export STUDIO_HOME=/home/studio
 export STUDIO_WEB=/srv/studio
-# claude is the system-wide /usr/bin/claude; gemini (v1) is in linuxbrew.
-export PATH="/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+# claude is system-wide; chromium (vision critic) in /usr/bin; agy in /usr/local/bin.
+export PATH="/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:${PATH:-}"
+# secrets: GEMINI_API_KEY for the gemini code + vision critics
+[ -f /home/studio/.config/studio/env ] && { set -a; . /home/studio/.config/studio/env; set +a; }
 
 ts="$(date +%Y%m%d-%H%M%S)"
 mkdir -p /home/studio/logs

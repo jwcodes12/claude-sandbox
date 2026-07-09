@@ -21,13 +21,19 @@ Nightly (~02:30 ET) the pipeline runs `bin/nightly.py`, **as the `studio` user**
 2. **Build** — a "lead builder" prompt emits one self-contained `index.html`
    (inline CSS+JS, no network) to **stdout**. Tools are disabled, so the model
    can never touch the filesystem — the artifact is pure text we capture.
-3. **Code critic** — a *distinct, adversarial role* judges the build **comparatively**
-   against past shipped sites (relative scores, never absolute) and decides ship/no-ship.
-4. **Record + publish** — run, critic score, and bandit outcomes go to sqlite;
-   the site is written to `/srv/studio/sites/<slug>/`; the gallery is regenerated.
+3. **Code critic** (gemini) — a *distinct model + adversarial role* judges the
+   build **comparatively** against past shipped sites (relative, never absolute)
+   and decides ship/no-ship.
+4. **Vision critic** (gemini) — headless chromium screenshots the built page and
+   Gemini judges how it actually *looks*. Supplementary signal; doesn't gate ship.
+5. **Record + publish** — run + both critic scores + bandit outcomes go to sqlite;
+   the site is written to `/srv/studio/sites/<slug>/`; the gallery is regenerated
+   (badge = average critic score).
 
-Reviewer ≠ builder is a hard rule (v0 uses claude for both with different role
-prompts; v1 forces a different *model* for the critic).
+Reviewer ≠ builder is a hard rule and now enforced by **model**: builder = claude,
+critics = gemini (via the Gemini API). Model choice per role is a cost-aware
+bandit — reward is quality-per-`model_cost`, so it favors a model that's ~as good
+but cheaper and only reaches for a pricier one when clearly better.
 
 ## Layout
 

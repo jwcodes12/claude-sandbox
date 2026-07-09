@@ -110,11 +110,15 @@ def select_model(con, role, cfg):
     for m in cands:
         if m not in rows or rows[m]["trials"] == 0:
             return m
-    # else exploit best mean reward, penalizing failures
-    def mean(m):
+    # else exploit best reward-per-cost, penalizing failures (prefers a model
+    # that's ~as good but cheaper; only picks a pricier one when clearly better)
+    costs = cfg.get("model_cost", {})
+
+    def value(m):
         r = rows[m]
-        return (r["reward_sum"] - 0.5 * r["failures"]) / max(1, r["trials"])
-    return max(cands, key=mean)
+        quality = (r["reward_sum"] - 0.5 * r["failures"]) / max(1, r["trials"])
+        return quality / max(0.05, costs.get(m, 1.0))
+    return max(cands, key=value)
 
 
 # Force pure text generation: the builder/critic must return the artifact on
@@ -126,14 +130,13 @@ NO_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "Read", "Glob"
 
 def run_model(model, prompt, timeout=CLAUDE_TIMEOUT):
     """Return (ok, text, failure_kind). failure_kind in {None,'quota','auth','error','timeout'}."""
-    if model == "claude":
-        cmd = ["claude", "-p", prompt, "--disallowedTools", *NO_TOOLS]
-    elif model == "gemini":
-        cmd = ["gemini", "-p", prompt]          # v1: needs studio-user auth
-    elif model == "codex":
-        cmd = ["codex", "exec", prompt]         # v1: needs studio-user auth
-    else:
+    if model == "gemini":
+        return gemini_generate(prompt, timeout=timeout)
+    if model == "codex":
+        return False, "", "auth"   # not yet authed for the studio user
+    if model != "claude":
         return False, "", "error"
+    cmd = ["claude", "-p", prompt, "--disallowedTools", *NO_TOOLS]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -146,6 +149,57 @@ def run_model(model, prompt, timeout=CLAUDE_TIMEOUT):
             return False, out, "auth"
         return False, out, "error"
     return True, out, None
+
+
+GEMINI_MODEL = os.environ.get("STUDIO_GEMINI_MODEL", "gemini-2.5-flash")
+
+
+def gemini_generate(prompt, image_path=None, model=GEMINI_MODEL, timeout=120):
+    """Gemini via the HTTP API (GEMINI_API_KEY). Supports an optional PNG for the
+    vision critic. agy's subscription auth is per-user and can't run headless, so
+    the studio service uses the portable API key (agy-gemini's fallback path)."""
+    import base64
+    import urllib.request
+    import urllib.error
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        return False, "", "auth"
+    parts = [{"text": prompt}]
+    if image_path:
+        try:
+            with open(image_path, "rb") as f:
+                parts.append({"inline_data": {"mime_type": "image/png",
+                              "data": base64.b64encode(f.read()).decode()}})
+        except OSError:
+            return False, "", "error"
+    body = json.dumps({"contents": [{"parts": parts}],
+                       "generationConfig": {"temperature": 0.3}}).encode()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    req = urllib.request.Request(url, data=body, headers={"content-type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            d = json.loads(r.read().decode())
+        text = d["candidates"][0]["content"]["parts"][0]["text"]
+        return (True, text, None) if text.strip() else (False, "", "error")
+    except urllib.error.HTTPError as e:
+        code = e.code
+        return False, "", ("quota" if code == 429 else "auth" if code in (401, 403) else "error")
+    except Exception:
+        return False, "", "error"
+
+
+def screenshot(html_path, out_path, w=900, h=650, timeout=60):
+    """Headless-chromium screenshot of a built page (the vision critic's eyes)."""
+    udir = f"/tmp/studio-chrome-{os.getpid()}"
+    cmd = ["chromium-browser", "--headless=new", "--disable-gpu", "--no-sandbox",
+           "--hide-scrollbars", f"--user-data-dir={udir}",
+           f"--screenshot={out_path}", f"--window-size={w},{h}",
+           "--virtual-time-budget=2500", f"file://{html_path}"]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=timeout)
+        return os.path.exists(out_path) and os.path.getsize(out_path) > 0
+    except Exception:
+        return False
 
 
 def bandit_update(con, role, model, output_type, reward=None, failure=None):
@@ -203,8 +257,9 @@ def slugify(words, night):
 def gallery_data(con):
     rows = con.execute("""
         SELECT r.slug,r.title,r.kind,r.brief,r.night,COALESCE(r.shipped_at,r.created_at) shipped_at,
-               (SELECT score FROM critic_scores c WHERE c.run_id=r.id ORDER BY c.id DESC LIMIT 1) score,
-               (SELECT verdict FROM critic_scores c WHERE c.run_id=r.id ORDER BY c.id DESC LIMIT 1) verdict,
+               (SELECT AVG(score) FROM critic_scores c WHERE c.run_id=r.id) score,
+               (SELECT verdict FROM critic_scores c WHERE c.run_id=r.id
+                  ORDER BY (role='code') DESC, c.id DESC LIMIT 1) verdict,
                (SELECT COALESCE(SUM(vote=1),0) FROM votes v WHERE v.slug=r.slug AND v.source='john') up,
                (SELECT COALESCE(SUM(vote=-1),0) FROM votes v WHERE v.slug=r.slug AND v.source='john') down
         FROM runs r WHERE r.status='shipped' ORDER BY r.night DESC, r.id DESC
@@ -405,6 +460,37 @@ def run_pipeline(dry=False):
     else:
         bandit_update(con, "code-critic", cmodel, kind, failure=fk)
         event(con, fk or "error", f"critic failed: {fk}", run_id)
+
+    # 3b) VISION CRITIC — screenshot the page, judge how it LOOKS (gemini, distinct
+    #     model from the claude builder). Supplementary signal; doesn't gate ship.
+    shot = f"/tmp/studio-{slug}.png"
+    if screenshot(str(site_dir / "index.html"), shot):
+        log("vision critic (gemini)")
+        vok, vout, vfk = gemini_generate(read_prompt(
+            "vision-critic", title=title, kind=kind, kind_guidance=guidance,
+            peers=peer_list(con)), image_path=shot)
+        if vok:
+            try:
+                vv = extract_json(vout)
+                vscore = max(0.0, min(1.0, float(vv.get("score", 0.5))))
+                con.execute("INSERT INTO critic_scores(run_id,role,critic_model,score,verdict) "
+                            "VALUES(?,?,?,?,?)", (run_id, "vision", GEMINI_MODEL, vscore,
+                                                  str(vv.get("verdict", ""))[:600]))
+                con.commit()
+                bandit_update(con, "vision-critic", "gemini", kind, reward=1.0)
+                log(f"vision score {vscore:.2f}")
+            except Exception as e:
+                event(con, "error", f"vision parse: {e}", run_id)
+                bandit_update(con, "vision-critic", "gemini", kind, failure="error")
+        else:
+            bandit_update(con, "vision-critic", "gemini", kind, failure=vfk)
+            event(con, vfk or "error", f"vision critic failed: {vfk}", run_id)
+        try:
+            os.remove(shot)
+        except OSError:
+            pass
+    else:
+        event(con, "error", "screenshot failed", run_id)
 
     # 4) SHIP DECISION + record
     bandit_update(con, "builder", bmodel, kind, reward=(score if ship else 0.0))
