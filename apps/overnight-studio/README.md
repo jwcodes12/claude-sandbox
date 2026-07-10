@@ -62,13 +62,28 @@ upstream CLI change can't silently break the nightly.
 | `/home/studio/bin/` | pipeline + vote service (private, `studio`-owned) |
 | `/home/studio/prompts/` | ideate / build / code-critic prompts |
 | `/home/studio/data/studio.sqlite` | scoreboard + votes (bandit, critics, runs) |
-| `/home/studio/config.json` | level ladder, cadence, kinds, model candidates (live/mutable) |
-| `/home/studio/.claude/.credentials.json` | studio's claude auth (copied from opc's account) |
+| `/home/studio/config.json` | level ladder, cadence, kinds, model candidates + costs (live/mutable) |
+| `/home/studio/.config/studio/env` | `CLAUDE_CODE_OAUTH_TOKEN` + `GEMINI_API_KEY` (studio's model auth) |
 | `/srv/studio/gallery/index.html` | the gallery (nginx docroot, `httpd_sys_content_t`) |
 | `/srv/studio/sites/<slug>/` | each published build |
 
 State lives under `/home/studio` (isolation); only static output lives under
 `/srv/studio` so nginx can serve it under SELinux without home-dir grants.
+
+## Feedback + hot-fix (when friends play)
+
+Every build has a small **floating feedback widget** injected into it (idempotent
+via `<!--studio-fb-start/end-->` markers), so anyone playing can report a bug or
+idea in the toy itself — it posts to the same-origin vote service. The gallery
+also has per-card 👍/👎 + a feedback box.
+
+A **hot-fix loop** acts on that feedback between nightly builds
+(`studio-hotfix.timer`, every 2 h → `nightly.py hotfix`; also `fix <slug>`):
+1. Skip pure praise via a cheap Gemini **actionability gate**.
+2. Otherwise the builder (per-kind routing) rewrites the build from `prompts/fix.md`
+   + the current HTML to address the feedback.
+3. A distinct-model critic re-scores it; the live file is replaced **only if it's
+   not worse** (regression guard). `feedback.handled` stops re-fix loops.
 
 ## Hosting
 

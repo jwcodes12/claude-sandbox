@@ -19,6 +19,7 @@ install -d -o $U -g $U -m 755 /srv/studio /srv/studio/sites /srv/studio/gallery
 echo "== code + prompts =="
 install -o $U -g $U -m 755 "$SRC"/bin/nightly.py   /home/studio/bin/nightly.py
 install -o $U -g $U -m 755 "$SRC"/bin/nightly.sh   /home/studio/bin/nightly.sh
+install -o $U -g $U -m 755 "$SRC"/bin/hotfix.sh    /home/studio/bin/hotfix.sh
 install -o $U -g $U -m 755 "$SRC"/bin/vote_service.py /home/studio/bin/vote_service.py
 install -o $U -g $U -m 644 "$SRC"/prompts/*.md     /home/studio/prompts/
 
@@ -32,6 +33,9 @@ fi
 
 echo "== db schema + bandit seed =="
 sudo -u $U sqlite3 /home/studio/data/studio.sqlite < "$SRC"/schema.sql
+# migrate older DBs that predate the feedback.handled column (hot-fix loop)
+sudo -u $U sqlite3 /home/studio/data/studio.sqlite \
+  "ALTER TABLE feedback ADD COLUMN handled INTEGER NOT NULL DEFAULT 0;" 2>/dev/null || true
 sudo -u $U sqlite3 /home/studio/data/studio.sqlite \
   "INSERT OR IGNORE INTO model_stats(role,model,output_type) VALUES
    ('builder','claude','any'),('code-critic','claude','any');"
@@ -78,15 +82,22 @@ if [ -f "$CF" ] && ! grep -q "studio.johnwatkinscodes.work" "$CF"; then
   echo "      service: http://127.0.0.1:80"
 fi
 
+echo "== backfill feedback widget into existing builds =="
+sudo -u $U env STUDIO_HOME=/home/studio STUDIO_WEB=/srv/studio python3 /home/studio/bin/nightly.py widgets || true
+
 echo "== systemd units =="
-install -m 644 "$SRC"/systemd/studio-votes.service   /etc/systemd/system/
-install -m 644 "$SRC"/systemd/studio-nightly.service /etc/systemd/system/
-install -m 644 "$SRC"/systemd/studio-nightly.timer   /etc/systemd/system/
+for u in studio-votes.service studio-nightly.service studio-nightly.timer \
+         studio-hotfix.service studio-hotfix.timer; do
+  install -m 644 "$SRC"/systemd/$u /etc/systemd/system/
+done
 systemctl daemon-reload
 systemctl enable --now studio-votes.service
+systemctl enable --now studio-hotfix.timer   # every 2h; cheap when no feedback
 echo "  vote service:"; systemctl is-active studio-votes.service
+echo "  hotfix timer:"; systemctl is-active studio-hotfix.timer
 
 echo
 echo "DONE. To enable nightly builds (~02:30 ET):"
 echo "  sudo systemctl enable --now studio-nightly.timer"
 echo "Manual run: sudo systemctl start studio-nightly.service  (logs in /home/studio/logs/)"
+echo "Hot-fix now: sudo systemctl start studio-hotfix.service"

@@ -1,0 +1,16 @@
+[Unit]
+Description=Overnight Studio feedback hot-fix scan
+After=network-online.target studio-votes.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=studio
+Group=studio
+WorkingDirectory=/home/studio
+ExecStart=/home/studio/bin/hotfix.sh
+TimeoutStartSec=3600
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/studio /srv/studio

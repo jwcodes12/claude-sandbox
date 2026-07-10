@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS feedback (
   voter         TEXT,
   text          TEXT NOT NULL,
   source        TEXT NOT NULL DEFAULT 'john',
+  handled       INTEGER NOT NULL DEFAULT 0,   -- 0 until the hot-fix loop acts on it
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_slug ON feedback(slug);

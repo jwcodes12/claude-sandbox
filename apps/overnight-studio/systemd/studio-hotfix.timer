@@ -1,0 +1,12 @@
+[Unit]
+Description=Overnight Studio hot-fix scan (every 2h)
+
+[Timer]
+# Every 2 hours; only does work when there's unhandled feedback, so it's cheap
+# when quiet. Catches friends' bug reports between nightly builds.
+OnCalendar=*-*-* 00/2:15:00 America/New_York
+Persistent=true
+RandomizedDelaySec=180
+
+[Install]
+WantedBy=timers.target

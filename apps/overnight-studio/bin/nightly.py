@@ -359,6 +359,47 @@ def esc(s):
     return (str(s or "")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+# A tiny floating feedback widget injected into every build so friends can report
+# bugs / leave notes while they play. Posts to the same-origin vote service. The
+# markers make injection idempotent (strip old, add fresh) across hot-fixes.
+FB_START, FB_END = "<!--studio-fb-start-->", "<!--studio-fb-end-->"
+FEEDBACK_WIDGET = """
+<div id="sfb" style="position:fixed;right:12px;bottom:12px;z-index:2147483000;font:14px system-ui,sans-serif">
+  <button id="sfb-t" style="border:0;border-radius:20px;padding:8px 14px;background:#12151d;color:#e7e9ee;box-shadow:0 2px 10px #0007;cursor:pointer">💬 feedback</button>
+  <form id="sfb-f" style="display:none;flex-direction:column;gap:6px;background:#12151d;border:1px solid #2a3040;border-radius:12px;padding:10px;width:240px;box-shadow:0 4px 20px #0009">
+    <textarea id="sfb-x" rows="3" maxlength="2000" placeholder="bug or idea? tell the studio…" style="width:100%;box-sizing:border-box;background:#0b0d12;color:#e7e9ee;border:1px solid #2a3040;border-radius:8px;padding:7px;font:inherit;font-size:13px"></textarea>
+    <div style="display:flex;gap:6px;align-items:center"><span id="sfb-m" style="flex:1;color:#6fce9b;font-size:12px"></span><button type="button" id="sfb-c" style="border:0;background:none;color:#6b7488;cursor:pointer">close</button><button type="submit" style="border:0;border-radius:8px;padding:6px 12px;background:#20264a;color:#e7e9ee;cursor:pointer">send</button></div>
+  </form>
+</div>
+<script>(function(){
+  var S="__SLUG__",A="__API__";
+  var v=localStorage.getItem('studio_voter');
+  if(!v){v=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random()).replace(/[^a-zA-Z0-9]/g,'').slice(0,32);localStorage.setItem('studio_voter',v);}
+  var t=document.getElementById('sfb-t'),f=document.getElementById('sfb-f'),x=document.getElementById('sfb-x'),m=document.getElementById('sfb-m');
+  function toggle(o){f.style.display=o?'flex':'none';t.style.display=o?'none':'inline-block';if(o)x.focus();}
+  t.onclick=function(){toggle(true)};document.getElementById('sfb-c').onclick=function(){toggle(false)};
+  f.onsubmit=function(e){e.preventDefault();var txt=(x.value||'').trim();if(!txt)return;
+    fetch(A+'/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:S,text:txt,voter:v})})
+    .then(function(r){return r.json()}).then(function(d){if(d&&d.ok){x.value='';m.textContent='thanks!';setTimeout(function(){toggle(false);m.textContent='';},1200);}else m.textContent='try again';})
+    .catch(function(){m.textContent='offline?';});};
+})();</script>
+"""
+
+
+def strip_feedback_widget(html):
+    return re.sub(re.escape(FB_START) + ".*?" + re.escape(FB_END), "", html, flags=re.S)
+
+
+def inject_feedback_widget(html, slug, api):
+    html = strip_feedback_widget(html)
+    w = FB_START + FEEDBACK_WIDGET.replace("__SLUG__", slug).replace("__API__", api) + FB_END
+    low = html.lower()
+    i = low.rfind("</body>")
+    if i == -1:
+        i = low.rfind("</html>")
+    return (html[:i] + w + html[i:]) if i != -1 else (html + w)
+
+
 def _card(cfg, it, hero=False):
     url = build_url(cfg, it["slug"])
     badge = f"{it['score']:.2f}" if it["score"] is not None else "—"
@@ -512,7 +553,7 @@ def run_pipeline(dry=False):
         render_gallery(con)
         return 3
     try:
-        html = extract_html(out)
+        html = inject_feedback_widget(extract_html(out), slug, api_base(cfg))
     except Exception as e:
         _finish_fail(con, run_id, "build:parse")
         event(con, "error", f"build parse: {e}", run_id)
@@ -611,6 +652,93 @@ def _record_fail(con, night, level, model, reason):
 def _finish_fail(con, run_id, reason):
     con.execute("UPDATE runs SET status='failed', fail_reason=? WHERE id=?", (reason, run_id))
     con.commit()
+
+
+def hotfix(con, slug):
+    """Repair a shipped build from friends' unhandled feedback. Only replaces the
+    live file if a fresh critic pass says it's not worse (regression guard)."""
+    cfg = load_config()
+    run = con.execute("SELECT * FROM runs WHERE slug=? AND status='shipped'", (slug,)).fetchone()
+    if not run:
+        return f"{slug}: no shipped run"
+    fb = con.execute("SELECT id,text FROM feedback WHERE slug=? AND handled=0 ORDER BY id", (slug,)).fetchall()
+    if not fb:
+        return f"{slug}: no new feedback"
+    site = SITES / slug / "index.html"
+    try:
+        cur_html = site.read_text()
+    except OSError:
+        return f"{slug}: no build file"
+    kind = run["kind"] or "site"
+    guidance = KIND_GUIDANCE.get(kind, kind)
+    fb_text = "\n".join("- " + f["text"] for f in fb)[:2000]
+    prior = con.execute("SELECT AVG(score) FROM critic_scores WHERE run_id=?", (run["id"],)).fetchone()[0] or 0.5
+
+    # cheap gate: don't burn an expensive rebuild on pure praise / vague notes
+    gok, gout, _ = gemini_generate(
+        "Feedback left on a small web toy/game:\n" + fb_text +
+        "\n\nIs ANY of it an actionable bug report or a concrete improvement request "
+        "(not just praise or a vague reaction)? Answer with ONLY 'yes' or 'no'.", timeout=60)
+    if gok and gout.strip().lower().startswith("no"):
+        con.execute("UPDATE feedback SET handled=1 WHERE slug=? AND handled=0", (slug,))
+        con.commit()
+        event(con, "fix-skip", f"{slug}: feedback not actionable ({len(fb)} item(s))", run["id"])
+        return f"{slug}: not actionable, acknowledged"
+
+    bmodel = select_model(con, "builder", cfg, kind)
+    log(f"hotfix {slug}: {len(fb)} feedback item(s), builder={bmodel}")
+    ok, out, fk = run_model_retry(bmodel, read_prompt(
+        "fix", title=run["title"], kind=kind, kind_guidance=guidance,
+        feedback=fb_text, html=strip_feedback_widget(cur_html)[:120000]), timeout=BUILD_TIMEOUT)
+    if not ok:
+        event(con, fk or "error", f"hotfix build failed: {fk}", run["id"])
+        return f"{slug}: fix build failed ({fk})"
+    try:
+        new_html = inject_feedback_widget(extract_html(out), slug, api_base(cfg))
+    except Exception as e:
+        event(con, "error", f"hotfix parse: {e}", run["id"])
+        return f"{slug}: fix parse failed"
+
+    # critique the fix (distinct model from the fixer)
+    cmodel = select_model(con, "code-critic", cfg, kind, exclude=bmodel)
+    cok, cout, _ = run_model(cmodel, read_prompt(
+        "code-critic", title=run["title"], kind=kind, pitch=run["brief"] or "",
+        kind_guidance=guidance, peers=peer_list(con), html=new_html[:120000]))
+    newscore = prior
+    if cok:
+        try:
+            newscore = max(0.0, min(1.0, float(extract_json(cout).get("score", prior))))
+        except Exception:
+            pass
+
+    con.execute("UPDATE feedback SET handled=1 WHERE slug=? AND handled=0", (slug,))
+    if newscore + 0.02 >= prior:                      # not worse -> ship the fix
+        site.write_text(new_html)
+        os.chmod(site, 0o644)
+        con.execute("INSERT INTO critic_scores(run_id,role,critic_model,score,verdict) "
+                    "VALUES(?,?,?,?,?)", (run["id"], "code", cmodel, newscore, "(post-hotfix)"))
+        con.commit()
+        event(con, "fix", f"{slug}: fixed {len(fb)} feedback; {prior:.2f}->{newscore:.2f} ({bmodel})", run["id"])
+        render_gallery(con)
+        return f"{slug}: FIXED {prior:.2f}->{newscore:.2f}"
+    con.commit()                                      # feedback marked handled; keep original
+    event(con, "fix-skip", f"{slug}: fix {newscore:.2f} < {prior:.2f}, kept original", run["id"])
+    return f"{slug}: kept original (fix {newscore:.2f} < {prior:.2f})"
+
+
+def hotfix_scan():
+    """Fix every shipped build that has unhandled feedback. Run by a timer so
+    friends' reports get acted on between nightly builds."""
+    con = db()
+    slugs = [r["slug"] for r in con.execute(
+        "SELECT DISTINCT f.slug FROM feedback f JOIN runs r ON r.slug=f.slug "
+        "WHERE f.handled=0 AND r.status='shipped'")]
+    if not slugs:
+        log("hotfix: no new feedback")
+        return 0
+    for s in slugs:
+        log(hotfix(con, s))
+    return 0
 
 
 GALLERY_TMPL = """<!DOCTYPE html>
@@ -752,6 +880,22 @@ def main():
     args = sys.argv[1:]
     if args and args[0] == "gallery":
         render_gallery(db())
+        return 0
+    if args and args[0] == "hotfix":
+        return hotfix_scan()
+    if args and args[0] == "fix" and len(args) > 1:
+        print(hotfix(db(), args[1]))
+        return 0
+    if args and args[0] == "widgets":            # backfill the feedback widget into existing builds
+        cfg = load_config()
+        n = 0
+        for d in sorted(SITES.glob("*/index.html")):
+            html = d.read_text()
+            if FB_START not in html:
+                d.write_text(inject_feedback_widget(html, d.parent.name, api_base(cfg)))
+                os.chmod(d, 0o644)
+                n += 1
+        print(f"injected feedback widget into {n} build(s)")
         return 0
     return run_pipeline(dry="--dry" in args)
 

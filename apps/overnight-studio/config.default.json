@@ -59,12 +59,12 @@
     "playtest-critic": ["gemini"]
   },
   "model_cost": {
-    "_comment": "Relative cost per call, 0..1 (roughly Opus>codex>Sonnet>Haiku>Gemini-flash). Used as a GENTLE penalty (value = quality - cost_weight*cost), so quality leads and cost only breaks near-ties.",
-    "opus": 1.0,
-    "codex": 0.7,
-    "sonnet": 0.2,
-    "haiku": 0.06,
-    "gemini": 0.05
+    "_comment": "Relative cost = output $/Mtok normalized to the priciest (2026: codex/GPT-5.5 $30, Opus4.8 $25, Sonnet $15, Haiku $5, Gemini-Flash $2.50). Builds are output-heavy so output rate dominates. Used as a GENTLE penalty (value = quality - cost_weight*cost) so quality leads and cost only breaks near-ties.",
+    "codex": 1.0,
+    "opus": 0.85,
+    "sonnet": 0.5,
+    "haiku": 0.17,
+    "gemini": 0.08
   },
   "cost_weight": 0.15,
   "retro": {
