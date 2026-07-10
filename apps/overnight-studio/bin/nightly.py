@@ -116,6 +116,10 @@ def select_model(con, role, cfg, kind="any", exclude=None):
     rows = {(r["model"], r["output_type"]): r for r in con.execute(
         "SELECT model,output_type,trials,reward_sum,failures FROM model_stats WHERE role=?", (role,))}
     costs = cfg.get("model_cost", {})
+    # cost is a GENTLE penalty, not a divisor: value = quality - w*cost. So a
+    # clearly-better model wins the hard tasks and cost only breaks near-ties
+    # (models that are "about as good" but not much cheaper don't get dropped).
+    w = cfg.get("cost_weight", 0.15)
 
     def value(m):
         r = rows.get((m, kind))
@@ -128,7 +132,7 @@ def select_model(con, role, cfg, kind="any", exclude=None):
             s = sum(x["reward_sum"] for (mm, _), x in rows.items() if mm == m)
             f = sum(x["failures"] for (mm, _), x in rows.items() if mm == m)
             q = (s - 0.5 * f) / t
-        return q / max(0.05, costs.get(m, 1.0))
+        return q - w * costs.get(m, 0.5)
 
     # 1) always try a (model, kind) pairing we've never tested
     untried = [m for m in cands if rows.get((m, kind), {"trials": 0})["trials"] == 0]
@@ -150,6 +154,16 @@ def select_model(con, role, cfg, kind="any", exclude=None):
 NO_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "Read", "Glob",
             "Grep", "WebFetch", "WebSearch", "Task", "TodoWrite"]
 
+# Pin EXACT Claude model ids so the studio never rides a shifting account default
+# (e.g. when Fable leaves the subscription) or the pinned CLI's lagging aliases
+# (its 'opus' still maps to 4.6). Exact ids resolve fine via the OAuth token.
+CLAUDE_MODELS = {
+    "opus": "claude-opus-4-8",              # top quality, top cost — for hard builds
+    "sonnet": "claude-sonnet-5",            # balanced default
+    "haiku": "claude-haiku-4-5-20251001",   # cheap/fast
+    "claude": "claude-sonnet-5",            # back-compat for old stats
+}
+
 
 def run_model(model, prompt, timeout=CLAUDE_TIMEOUT):
     """Return (ok, text, failure_kind). failure_kind in {None,'quota','auth','error','timeout'}."""
@@ -157,9 +171,10 @@ def run_model(model, prompt, timeout=CLAUDE_TIMEOUT):
         return gemini_generate(prompt, timeout=timeout)
     if model == "codex":
         return codex_exec(prompt, timeout=timeout)
-    if model != "claude":
+    cli_id = CLAUDE_MODELS.get(model)
+    if not cli_id:
         return False, "", "error"
-    cmd = ["claude", "-p", prompt, "--disallowedTools", *NO_TOOLS]
+    cmd = ["claude", "-p", prompt, "--model", cli_id, "--disallowedTools", *NO_TOOLS]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:

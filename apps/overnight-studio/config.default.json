@@ -52,18 +52,21 @@
     }
   },
   "models": {
-    "_comment": "Candidate models per role. The per-kind bandit explores/exploits among these; critic is chosen to differ from the builder. Builders COMPETE per kind (claude, gemini, codex) so each content type routes to whoever scores best. code-critic lists all so a non-builder is always available.",
-    "builder": ["claude", "gemini", "codex"],
-    "code-critic": ["claude", "gemini", "codex"],
+    "_comment": "Candidate models per role (exact-pinned in nightly.py CLAUDE_MODELS). Builders COMPETE per kind: opus=Opus 4.8, sonnet=Sonnet 5, plus gemini + codex. Opus 4.8 wins the hard/high-value builds where its quality justifies the cost; cheaper models take the light ones. Critic is any non-builder.",
+    "builder": ["opus", "sonnet", "gemini", "codex"],
+    "code-critic": ["opus", "sonnet", "gemini", "codex"],
     "vision-critic": ["gemini"],
     "playtest-critic": ["gemini"]
   },
   "model_cost": {
-    "_comment": "Relative $/call hint. The bandit reward is quality-per-cost, so it prefers a model that's ~as good but cheaper, and only reaches for a pricier one when clearly better. Seed from reputable benchmarks/pricing.",
-    "claude": 1.0,
-    "gemini": 0.12,
-    "codex": 1.0
+    "_comment": "Relative cost per call, 0..1 (roughly Opus>codex>Sonnet>Haiku>Gemini-flash). Used as a GENTLE penalty (value = quality - cost_weight*cost), so quality leads and cost only breaks near-ties.",
+    "opus": 1.0,
+    "codex": 0.7,
+    "sonnet": 0.2,
+    "haiku": 0.06,
+    "gemini": 0.05
   },
+  "cost_weight": 0.15,
   "retro": {
     "promote_if": "all runs shipped AND peak budget < 0.70 AND zero failures over the week",
     "demote_if": "2+ failures over the week"

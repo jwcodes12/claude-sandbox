@@ -35,12 +35,17 @@ epsilon-greedy bandit over the *per-kind* scoreboard: it tries untried
 (model, kind) pairings, keeps a decaying chance of random exploration, then
 exploits the best **quality-per-`model_cost`** for that kind. So builders compete
 *per content type* — the studio can learn that (say) codex makes better art toys
-while claude writes better articles, and route each kind accordingly, favoring a
-model that's ~as good but cheaper. Builder reward = the night's average critic
+while claude writes better articles, and route each kind accordingly. Cost is a
+*gentle* tiebreaker (`value = quality - cost_weight*cost`), so a clearly-better
+model wins the hard builds and cost only decides between models that are about as
+good. Builder reward = the night's average critic
 score (the quality gate); John's votes are the eventual ground truth. Reviewer ≠
 builder is enforced dynamically: the critic is chosen with `exclude=<builder>`.
-Builders competing now: **claude, gemini, codex** (all authed for studio); the
-critic is any non-builder among them (+ gemini for the vision critic).
+Builders competing now: **opus (Claude Opus 4.8), sonnet (Claude Sonnet 5),
+gemini, codex** — the critic is any non-builder among them (+ gemini for vision).
+Claude model ids are **exact-pinned** in `CLAUDE_MODELS` (nightly.py), so the
+studio never rides a shifting account default (e.g. when Fable leaves the
+subscription) — Opus 4.8 is used deliberately where its quality earns its cost.
 
 **Timing / reliability.** A build may involve real high-reasoning thinking (codex
 takes a minute or few), so the build step allows up to ~30 min; the whole night
