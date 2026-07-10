@@ -17,6 +17,8 @@
 // and unref()'d so embedding the server in tests never hangs the process.
 
 import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { createWriter } from '../src/js/net/writer.js';
@@ -40,7 +42,8 @@ const DEFAULTS = {
     heartbeatMs: 30000,
     emptyRoomTtlMs: 30 * 60 * 1000,
     reapIntervalMs: 60000,
-    botStepCap: 500                   // max bot submissions between human actions
+    botStepCap: 500,                  // max bot submissions between human actions
+    statePath: process.env.LL_STATE_FILE || null   // persist rooms across restarts (hotfix-while-playing)
 };
 
 const newRoomId = () => randomBytes(9).toString('base64url');   // 12 url-safe chars
@@ -90,6 +93,74 @@ export async function createGameServer(opts = {}) {
         wss.once('error', reject);
     });
     const port = wss.address().port;
+
+    // ---- persistence (hotfix-while-playing) ----------------------------------
+    // Rooms are plain JSON: on shutdown (and debounced after every accepted
+    // action) they're written to cfg.statePath; on boot they're restored.
+    // Clients ride out the restart on their reconnect backoff, rejoin by seat
+    // token, and Resume — a server hotfix costs players ~2s of banner.
+
+    let saveTimer = null;
+    function saveRooms() {
+        if (!cfg.statePath) return;
+        const dump = [...rooms.values()].filter(r => !r.closed).map(r => ({
+            id: r.id,
+            started: r.started,
+            seed: r.seed ?? null,
+            players: r.playersDesc ?? null,
+            state: r.writer ? r.writer.getState() : null,
+            seats: r.seats.map(s => s ? { name: s.name, token: s.token, isBot: !!s.isBot } : null)
+        }));
+        try {
+            fs.mkdirSync(path.dirname(cfg.statePath), { recursive: true });
+            fs.writeFileSync(cfg.statePath, JSON.stringify({ savedAt: Date.now(), rooms: dump }));
+        } catch (e) {
+            console.error('saveRooms failed:', e.message);
+        }
+    }
+    function scheduleSave() {
+        if (!cfg.statePath || saveTimer) return;
+        saveTimer = setTimeout(() => { saveTimer = null; saveRooms(); }, 1500);
+        saveTimer.unref();
+    }
+
+    function restoreRooms() {
+        if (!cfg.statePath || !fs.existsSync(cfg.statePath)) return 0;
+        let dump;
+        try { dump = JSON.parse(fs.readFileSync(cfg.statePath, 'utf8')); }
+        catch (e) { console.error('restoreRooms: unreadable state file:', e.message); return 0; }
+        const salt = randomBytes(3).toString('hex');   // fresh bot intent-id tags
+        let n = 0;
+        for (const r of dump.rooms || []) {
+            if (rooms.has(r.id)) continue;
+            const room = {
+                id: r.id,
+                seats: r.seats.map((s, i) => s ? {
+                    name: s.name, token: s.token, isBot: !!s.isBot, ws: null,
+                    idSource: s.isBot ? makeIdSource(`bot${i}-${salt}`) : null
+                } : null),
+                started: !!r.started,
+                writer: null,
+                channel: null,
+                seed: r.seed ?? undefined,
+                playersDesc: r.players ?? undefined,
+                emptySince: Date.now(),   // reap normally if nobody returns
+                botScheduled: false,
+                botSteps: 0,
+                closed: false
+            };
+            if (room.started && r.state) {
+                room.channel = makeWriterChannel(room);
+                room.writer = createWriter({
+                    seed: r.seed, players: r.players,
+                    channel: room.channel, restoreState: r.state
+                });
+            }
+            rooms.set(room.id, room);
+            n++;
+        }
+        return n;
+    }
 
     // ---- framing helpers ----------------------------------------------------
 
@@ -160,6 +231,7 @@ export async function createGameServer(opts = {}) {
                     if (entry && isOpen(entry.ws)) entry.ws.send(text);
                 }
                 scheduleBotStep(room);    // the game advanced: a bot may act next
+                scheduleSave();           // crash/restart safety
             },
             onMessage(fn) { cb = fn; },
             close() { cb = null; },
@@ -289,6 +361,7 @@ export async function createGameServer(opts = {}) {
         }
         updatePresence(room);
         broadcastRoom(room);
+        scheduleSave();
     }
 
     function handleAddBot(ws, conn) {
@@ -483,6 +556,9 @@ export async function createGameServer(opts = {}) {
     }, cfg.reapIntervalMs);
     reaper.unref();
 
+    const restored = restoreRooms();
+    if (restored) console.log(`restored ${restored} room(s) from ${cfg.statePath}`);
+
     // ---- public surface -------------------------------------------------------------
 
     return {
@@ -495,6 +571,8 @@ export async function createGameServer(opts = {}) {
         close() {
             clearInterval(heartbeat);
             clearInterval(reaper);
+            if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+            saveRooms();                        // rooms survive the restart
             for (const room of [...rooms.values()]) destroyRoom(room);
             for (const ws of wss.clients) ws.terminate();
             return new Promise((resolve) => wss.close(() => resolve()));
@@ -505,8 +583,18 @@ export async function createGameServer(opts = {}) {
 // Run directly: `node server/index.js` (or npm run serve:ws).
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
-    createGameServer().then(
-        (s) => console.log(`lordlandlord ws server listening on :${s.port}`),
+    const statePath = process.env.LL_STATE_FILE
+        || path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'var', 'rooms.json');
+    createGameServer({ statePath }).then(
+        (s) => {
+            console.log(`lordlandlord ws server listening on :${s.port} (state: ${statePath})`);
+            const shutdown = (sig) => {
+                console.log(`${sig}: saving rooms and shutting down`);
+                s.close().then(() => process.exit(0));
+            };
+            process.on('SIGTERM', () => shutdown('SIGTERM'));
+            process.on('SIGINT', () => shutdown('SIGINT'));
+        },
         (err) => { console.error('failed to start:', err.message); process.exit(1); }
     );
 }

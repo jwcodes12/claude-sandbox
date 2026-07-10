@@ -96,6 +96,7 @@ function init() {
     // The lobby runs on the WebSocket game server (net/ws-transport.js); the
     // old PeerJS path was removed in Step 8.
     injectSoloButton();
+    injectFeedbackButton();
 
     document.getElementById('btn-copy-id').onclick = () => {
         if (netInfo) navigator.clipboard.writeText(netShareLink(netInfo.roomId));
@@ -496,6 +497,69 @@ function exposeNetTestHook() {
             return a || null;
         }
     };
+}
+
+// ---- feedback (Step: friends-are-playing) -----------------------------------
+// A small always-available scroll: POSTs to /feedback on the static server,
+// which appends to var/feedback.jsonl on the box.
+function injectFeedbackButton() {
+    if (document.getElementById('btn-feedback')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-feedback';
+    btn.title = 'Send word to the crown';
+    btn.textContent = '📜';
+    btn.onclick = showFeedbackModal;
+    document.body.appendChild(btn);
+}
+
+function showFeedbackModal() {
+    let overlay = document.getElementById('feedback-modal');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'feedback-modal';
+        overlay.innerHTML = `
+            <div class="feedback-panel">
+                <h3>📜 Send word to the crown</h3>
+                <p>Bug? Complaint? A card did thee wrong? Speak.</p>
+                <textarea id="feedback-text" maxlength="2000" rows="5"
+                    placeholder="It was Eddie's turn and then…"></textarea>
+                <div class="feedback-actions">
+                    <button id="feedback-cancel" class="badge btn">Never mind</button>
+                    <button id="feedback-send" class="badge btn">Send it 🕊️</button>
+                </div>
+            </div>`;
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.classList.add('hidden'); };
+        document.body.appendChild(overlay);
+        document.getElementById('feedback-cancel').onclick = () => overlay.classList.add('hidden');
+        document.getElementById('feedback-send').onclick = async () => {
+            const ta = document.getElementById('feedback-text');
+            const text = ta.value.trim();
+            if (!text) return;
+            const sendBtn = document.getElementById('feedback-send');
+            sendBtn.disabled = true;
+            try {
+                const res = await fetch('/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text,
+                        name: (netInfo && gameState.players?.[netInfo.seat]?.name) || null,
+                        room: netInfo ? netInfo.roomId : null,
+                    }),
+                });
+                if (!res.ok) throw new Error(String(res.status));
+                ta.value = '';
+                overlay.classList.add('hidden');
+                flashHint('Thy words fly to the crown. 🕊️');
+            } catch (_e) {
+                flashHint('The messenger was waylaid — try again anon.');
+            } finally {
+                sendBtn.disabled = false;
+            }
+        };
+    }
+    overlay.classList.remove('hidden');
+    document.getElementById('feedback-text').focus();
 }
 
 function injectSoloButton() {

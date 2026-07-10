@@ -369,6 +369,64 @@ describe('gameplay over real sockets', () => {
         void a;
     });
 
+    // Hotfix-while-playing: rooms persist to statePath on close and are
+    // restored on the next boot; players ride out the restart on reconnect
+    // backoff + rejoin-by-token + Resume.
+    it('a mid-game server restart preserves the room: rejoin + resume converges', async () => {
+        const statePath = `/tmp/ll-rooms-test-${process.pid}-${Date.now()}.json`;
+        const s1 = await boot({ statePath });
+        const { b, jb, clients, writer, roomId } = await startTwoHumanGame(s1);
+
+        for (let i = 0; i < 4; i++) {
+            const step = stepAction(writer);
+            if (!step) break;
+            const target = writer.getVersion() + 1;
+            clients[step.seat].submit(step.action);
+            await converge(writer, clients, target);
+        }
+        const vBefore = writer.getVersion();
+        const hashBefore = writer.hashOf();
+        expect(vBefore).toBeGreaterThan(0);
+
+        // "Hotfix deploy": close (saves rooms), boot a fresh server on the file.
+        await s1.close();
+        const s2 = await boot({ statePath });
+        const room2 = s2.getRoom(roomId);
+        expect(room2).not.toBeNull();
+        expect(room2.started).toBe(true);
+        expect(room2.writer.getVersion()).toBe(vBefore);
+        expect(room2.writer.hashOf()).toBe(hashBefore);
+
+        // Seat 1 reconnects exactly like the browser transport would.
+        const fresh = await connect(s2.port);
+        fresh.send({ t: 'rejoin', roomId, seat: 1, seatToken: jb.seatToken });
+        const j = await fresh.next('joined');
+        expect(j.started).toBe(true);
+        const restart = await fresh.next('started');
+        const shell = makeShell();
+        shell.attach(fresh);
+        const rebuilt = createClient({
+            seat: 1,
+            channel: shell,
+            state: createInitialState(restart.seed, restart.players),
+            clientId: 'c1',
+            idSource: makeIdSource('c1-after-restart')
+        });
+        rebuilt.reconnect();
+        await waitFor(() => rebuilt.getVersion() === vBefore, 4000, 'post-restart catch-up');
+        expect(rebuilt.hashOf()).toBe(hashBefore);
+
+        // And the game keeps moving on the restored writer.
+        const step = stepAction(room2.writer);
+        if (step && step.seat === 1) {
+            const target = room2.writer.getVersion() + 1;
+            rebuilt.submit(step.action);
+            await waitFor(() => room2.writer.getVersion() >= target, 4000, 'post-restart action');
+        }
+        void b;
+        try { (await import('node:fs')).unlinkSync(statePath); } catch { /* ignore */ }
+    });
+
     it('drives bot seats: a bot takes its whole turn unattended', async () => {
         const server = await boot();
         const a = await connect(server.port);

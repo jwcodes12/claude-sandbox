@@ -1960,3 +1960,62 @@ canvas {
 .net-banner.hidden {
     display: none;
 }
+
+/* ---- feedback scroll -------------------------------------------------------- */
+#btn-feedback {
+    position: fixed;
+    left: 10px;
+    bottom: 10px;
+    z-index: 280;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid #8a6d3b;
+    background: rgba(42, 28, 18, 0.85);
+    font-size: 19px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.2s, transform 0.2s;
+}
+#btn-feedback:hover { opacity: 1; transform: scale(1.08); }
+
+#feedback-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 320;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#feedback-modal.hidden { display: none; }
+.feedback-panel {
+    width: min(440px, 92vw);
+    background: #2a1c12;
+    border: 1px solid #8a6d3b;
+    border-radius: 12px;
+    padding: 18px 20px;
+    color: #f0e2c4;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+.feedback-panel h3 { margin: 0 0 4px; color: #d4af37; }
+.feedback-panel p { margin: 0 0 10px; font-size: 13px; opacity: 0.8; }
+.feedback-panel textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: #1c120a;
+    color: #f0e2c4;
+    border: 1px solid #5a3a27;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 15px;
+    font-family: inherit;
+    resize: vertical;
+}
+.feedback-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}

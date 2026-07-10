@@ -19,8 +19,13 @@ import { reduce } from '../core/reducer.js';
 import { hashState } from '../core/replay.js';
 import { accepted, snapshot, actionFromRequest } from './protocol.js';
 
-export function createWriter({ seed, players, channel }) {
-    let state = createInitialState(seed, players);
+export function createWriter({ seed, players, channel, restoreState = null }) {
+    // restoreState: resume a mid-game writer after a server restart — the
+    // state is plain JSON, so a saved copy IS the writer's whole world.
+    // (The idempotency sets start empty: pre-restart sockets are gone, and
+    // post-restart intent ids are fresh — bots get re-salted tags, browsers
+    // salt per pageload.)
+    let state = restoreState ? clone(restoreState) : createInitialState(seed, players);
     const applied = new Set();        // intent ids that have been applied
     const byId = new Map();           // intent id -> the Accepted we broadcast
     const log = [];                   // ordered Accepted log (for resume/tests)
