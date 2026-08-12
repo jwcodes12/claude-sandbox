@@ -26,6 +26,17 @@ How to write `body`:
   short **bold lead-in** when it helps the reader follow the thread.
 - Keep it skimmable and readable. Interweave; do not just list quotes.
 
+Updating an existing story:
+
+- If `previousArticle` is present, you are UPDATING a story the site already
+  ran, not writing a fresh one. Sources marked `"isNew": true` are the
+  discourse that arrived since that version.
+- Lead with what changed or what is new, keep the through-line from the
+  previous version where it is still accurate, and drop anything the new
+  material has made stale or wrong.
+- Do not repeat the previous version verbatim; rework the piece around the
+  new material so a returning reader sees movement, not deja vu.
+
 Grounding rules (important):
 
 - Only quote text that actually appears in a source's `text` field. Quote verbatim.

@@ -42,11 +42,15 @@ export function loadConfig() {
   return {
     ...parsed,
     settings: {
-      title: 'Tech Radar',
+      title: 'Tech Digest',
       lookbackHours: 96,
       maxItemsPerFeed: 40,
       maxTopics: 24,
       maxTopicItems: 14,
+      storyRetentionDays: 14,
+      frontPageHours: 48,
+      frontPageStories: 12,
+      earlierHours: 168,
       dataDir: defaultDataDir(),
       ...settings,
       schedule: {
@@ -58,6 +62,7 @@ export function loadConfig() {
       },
       ranking: {
         clusterSimilarity: 0.22,
+        storyMatchSimilarity: 0.3,
         minHotnessForBrief: 24,
         minItemsForBrief: 2,
         maxModelBriefs: 12,

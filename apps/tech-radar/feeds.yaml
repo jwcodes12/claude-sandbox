@@ -1,10 +1,17 @@
 settings:
-  title: Tech Radar
-  description: Rolling clustered briefings from tech Twitter, blogs, research feeds, and developer news.
+  title: Tech Digest
+  description: A rolling digest of the tech discourse. Stories update in place as new posts, takes, and papers land.
   lookbackHours: 96
   maxItemsPerFeed: 40
   maxTopics: 24
   maxTopicItems: 14
+  # The digest page shows the hottest frontPageStories stories that moved in
+  # the last frontPageHours, with a compact "Earlier" list back to
+  # earlierHours. Stories are deleted entirely after storyRetentionDays.
+  frontPageHours: 48
+  frontPageStories: 12
+  earlierHours: 168
+  storyRetentionDays: 14
   schedule:
     timezone: America/New_York
     peakStartHour: 8
@@ -12,6 +19,9 @@ settings:
     offPeakMinimumMinutes: 60
   ranking:
     clusterSimilarity: 0.22
+    # Minimum keyword similarity for folding a run's cluster into an existing
+    # story when they share no literal items.
+    storyMatchSimilarity: 0.3
     minHotnessForBrief: 24
     minItemsForBrief: 2
     maxModelBriefs: ${TECH_RADAR_MAX_MODEL_BRIEFS:-12}

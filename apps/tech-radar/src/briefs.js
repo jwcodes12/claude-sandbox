@@ -3,79 +3,64 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { fallbackArticle } from './cluster.js';
 import { resolveFromRoot } from './paths.js';
+import { storyDigestArticle, storyTopicView } from './stories.js';
 
-// `cache` maps topic.id -> previous article, so unchanged topic clusters reuse
-// their existing model brief instead of paying for a fresh generation each run.
-export async function attachBriefs(topics, config, cache = new Map()) {
+// Regenerate articles only for stories that gained discourse this run (or have
+// no article yet). Unchanged stories keep their existing article verbatim, so
+// model briefs are only paid for when a story actually moved. Changed stories
+// hand the model their previous brief so it updates the piece instead of
+// rewriting it blind.
+export async function attachStoryBriefs(stories, config) {
   const shouldUseModel = Boolean(config.settings.models.enabled) && process.env.TECH_RADAR_ENABLE_LLM === '1';
   const pipelineKey = briefPipelineKey(config);
-  const eligibleTopics = topics.map((topic) => ({
-    ...topic,
-    needsModel: topic.hotness >= config.settings.ranking.minHotnessForBrief &&
-      topic.items.length >= config.settings.ranking.minItemsForBrief,
-  }));
+  const ranking = config.settings.ranking;
+  const maxBriefs = Number(ranking.maxModelBriefs ?? 12);
 
-  if (!shouldUseModel) {
-    return eligibleTopics.map((topic) => ({
-      ...topic,
-      article: fallbackArticle(topic),
-    }));
-  }
-
-  const promptTemplate = fs.readFileSync(resolveFromRoot('prompts/topic-brief.md'), 'utf8');
-  const editTemplate = fs.readFileSync(resolveFromRoot('prompts/topic-edit.md'), 'utf8');
-  const maxBriefs = Number(config.settings.ranking.maxModelBriefs ?? 12);
-  const output = [];
+  let promptTemplate = null;
+  let editTemplate = null;
   let generated = 0;
 
-  for (const topic of eligibleTopics) {
-    if (!topic.needsModel) {
-      output.push({ ...topic, article: fallbackArticle(topic) });
-      continue;
-    }
+  // Hottest stories first, so the per-run model budget is spent on the
+  // stories most likely to lead the digest page.
+  const candidates = stories
+    .filter((story) => story.changed || !story.article)
+    .sort((a, b) => b.hotness - a.hotness);
 
-    // Reuse a cached model brief when the cluster (and thus topic.id) is unchanged.
-    const cached = cache.get(topic.id);
-    if (cached && cached.mode === 'model' && cached.pipelineKey === pipelineKey) {
-      const digest = fallbackArticle(topic);
-      output.push({
-        ...topic,
-        article: {
-          ...digest,
-          ...cached,
-          lane: cached.lane ?? digest.lane,
-          sources: digest.sources,
-          updatedAt: cached.updatedAt,
-        },
-      });
-      continue;
-    }
+  for (const story of candidates) {
+    const digest = storyDigestArticle(story, config);
+    const previousArticle = story.article;
+    story.article = digest;
 
-    // Stay within the per-run generation budget; overflow uses the source digest.
-    if (generated >= maxBriefs) {
-      output.push({ ...topic, article: fallbackArticle(topic) });
-      continue;
-    }
+    if (!shouldUseModel) continue;
+    if (story.hotness < ranking.minHotnessForBrief || story.items.length < ranking.minItemsForBrief) continue;
+    if (generated >= maxBriefs) continue;
+
+    promptTemplate ??= fs.readFileSync(resolveFromRoot('prompts/topic-brief.md'), 'utf8');
+    editTemplate ??= fs.readFileSync(resolveFromRoot('prompts/topic-edit.md'), 'utf8');
 
     try {
-      const article = await generateBrief(topic, config, promptTemplate, editTemplate);
+      const article = await generateBrief(storyTopicView(story, config), config, promptTemplate, editTemplate, {
+        previousArticle: previousArticle?.mode === 'model'
+          ? { summary: previousArticle.summary, body: previousArticle.body }
+          : null,
+        freshItemIds: new Set(story.freshItemIds ?? []),
+      });
       generated += 1;
-      const merged = { ...fallbackArticle(topic), ...article, mode: 'model', pipelineKey };
+      const merged = { ...digest, ...article, mode: 'model', pipelineKey, updatedAt: story.updatedAt };
       merged.shortTake = article.summary ?? merged.shortTake;
       merged.whyHot = article.summary ?? merged.whyHot;
-      output.push({ ...topic, article: merged });
+      story.article = merged;
     } catch (error) {
-      console.warn(`[brief] ${topic.slug}: ${error.message}`);
-      output.push({ ...topic, article: { ...fallbackArticle(topic), modelError: error.message } });
+      console.warn(`[brief] ${story.slug}: ${error.message}`);
+      story.article = { ...digest, modelError: error.message };
     }
   }
-  return output;
+  return generated;
 }
 
-async function generateBrief(topic, config, promptTemplate, editTemplate) {
-  const sourcePayload = topicSourcePayload(topic);
+async function generateBrief(topic, config, promptTemplate, editTemplate, context = {}) {
+  const sourcePayload = topicSourcePayload(topic, context);
   const input = promptTemplate
     .replace('{{TOPIC_JSON}}', JSON.stringify(sourcePayload, null, 2));
 
@@ -149,11 +134,12 @@ async function generateBrief(topic, config, promptTemplate, editTemplate) {
   };
 }
 
-function topicSourcePayload(topic) {
+function topicSourcePayload(topic, { previousArticle = null, freshItemIds = new Set() } = {}) {
   return {
     title: topic.title,
     hotness: topic.hotness,
     keywords: topic.keywords,
+    previousArticle,
     sources: topic.items.map((item) => ({
       title: item.title,
       source: item.sourceTitle,
@@ -161,6 +147,7 @@ function topicSourcePayload(topic) {
       author: item.author,
       url: item.url,
       publishedAt: item.publishedAt,
+      isNew: freshItemIds.has(item.id) || undefined,
       text: item.contentText || item.summary,
     })),
   };

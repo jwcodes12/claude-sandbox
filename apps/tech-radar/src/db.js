@@ -71,6 +71,27 @@ export function openDatabase(config) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS stories (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      lane TEXT NOT NULL,
+      hotness REAL NOT NULL,
+      keywords_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      updates_json TEXT NOT NULL,
+      article_json TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS story_items (
+      story_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      relevance REAL NOT NULL,
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (story_id, item_id)
+    );
   `);
   return db;
 }
@@ -163,45 +184,6 @@ export function getRecentItems(db, lookbackHours) {
   `).all(since).map(rowToItem);
 }
 
-export function saveTopics(db, topics) {
-  db.exec('DELETE FROM topic_items;');
-  db.exec('DELETE FROM topics;');
-  const topicStmt = db.prepare(`
-    INSERT INTO topics (id, slug, title, hotness, summary, article_json, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  const itemStmt = db.prepare(`
-    INSERT INTO topic_items (topic_id, item_id, relevance)
-    VALUES (?, ?, ?)
-  `);
-  const now = new Date().toISOString();
-  for (const topic of topics) {
-    topicStmt.run(
-      topic.id,
-      topic.slug,
-      topic.title,
-      topic.hotness,
-      topic.article.shortTake,
-      JSON.stringify(topic.article),
-      now,
-    );
-    for (const item of topic.items) {
-      itemStmt.run(topic.id, item.id, item.relevance ?? 1);
-    }
-  }
-}
-
-export function readTopics(db) {
-  return db.prepare('SELECT * FROM topics ORDER BY hotness DESC, updated_at DESC').all().map((row) => ({
-    id: row.id,
-    slug: row.slug,
-    title: row.title,
-    hotness: row.hotness,
-    article: JSON.parse(row.article_json),
-    updatedAt: row.updated_at,
-  }));
-}
-
 export function readSources(db) {
   return db.prepare('SELECT * FROM sources ORDER BY title').all().map((row) => ({
     id: row.id,
@@ -211,6 +193,107 @@ export function readSources(db) {
     weight: row.weight,
     tags: JSON.parse(row.tags_json),
   }));
+}
+
+export function readStories(db) {
+  const itemStmt = db.prepare(`
+    SELECT si.*, sti.relevance AS story_relevance, sti.added_at AS story_added_at
+    FROM story_items sti
+    JOIN source_items si ON si.id = sti.item_id
+    WHERE sti.story_id = ?
+    ORDER BY COALESCE(si.published_at, si.fetched_at) DESC
+  `);
+  return db.prepare('SELECT * FROM stories ORDER BY updated_at DESC').all().map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    lane: row.lane,
+    hotness: row.hotness,
+    keywords: JSON.parse(row.keywords_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    updates: JSON.parse(row.updates_json),
+    article: JSON.parse(row.article_json),
+    items: itemStmt.all(row.id).map((itemRow) => ({
+      ...rowToItem(itemRow),
+      relevance: itemRow.story_relevance,
+      addedAt: itemRow.story_added_at,
+    })),
+  }));
+}
+
+export function saveStories(db, stories) {
+  db.exec('DELETE FROM story_items;');
+  db.exec('DELETE FROM stories;');
+  const storyStmt = db.prepare(`
+    INSERT INTO stories (id, slug, title, lane, hotness, keywords_json, created_at, updated_at, updates_json, article_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const itemStmt = db.prepare(`
+    INSERT OR REPLACE INTO story_items (story_id, item_id, relevance, added_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  for (const story of stories) {
+    storyStmt.run(
+      story.id,
+      story.slug,
+      story.title,
+      story.lane,
+      story.hotness,
+      JSON.stringify(story.keywords ?? []),
+      story.createdAt,
+      story.updatedAt,
+      JSON.stringify(story.updates ?? []),
+      JSON.stringify(story.article),
+    );
+    for (const item of story.items) {
+      itemStmt.run(story.id, item.id, item.relevance ?? 1, item.addedAt ?? story.updatedAt);
+    }
+  }
+}
+
+// One-time cutover: seed the stories table from the old per-run topics so the
+// digest starts from the current radar content instead of an empty page.
+export function migrateTopicsToStories(db) {
+  const storyCount = db.prepare('SELECT COUNT(*) AS n FROM stories').get().n;
+  if (storyCount > 0) return 0;
+  const topics = db.prepare('SELECT * FROM topics').all();
+  if (topics.length === 0) return 0;
+
+  const links = db.prepare('SELECT * FROM topic_items').all();
+  const linksByTopic = new Map();
+  for (const link of links) {
+    if (!linksByTopic.has(link.topic_id)) linksByTopic.set(link.topic_id, []);
+    linksByTopic.get(link.topic_id).push(link);
+  }
+
+  const storyStmt = db.prepare(`
+    INSERT OR IGNORE INTO stories (id, slug, title, lane, hotness, keywords_json, created_at, updated_at, updates_json, article_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const itemStmt = db.prepare(`
+    INSERT OR IGNORE INTO story_items (story_id, item_id, relevance, added_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  for (const topic of topics) {
+    const article = JSON.parse(topic.article_json);
+    storyStmt.run(
+      topic.id,
+      topic.slug,
+      topic.title,
+      article.lane ?? 'news',
+      topic.hotness,
+      JSON.stringify(article.keywords ?? []),
+      topic.updated_at,
+      topic.updated_at,
+      '[]',
+      topic.article_json,
+    );
+    for (const link of linksByTopic.get(topic.id) ?? []) {
+      itemStmt.run(topic.id, link.item_id, link.relevance, topic.updated_at);
+    }
+  }
+  return topics.length;
 }
 
 export function getState(db, key) {

@@ -1,147 +1,192 @@
+const REFRESH_MS = 5 * 60_000;
+const RECENT_MS = 12 * 3_600_000;
+
 const state = {
-  topics: [],
-  selectedSlug: null,
-  lane: 'takes',
+  stories: [],
+  earlier: [],
+  generatedAt: null,
+  openSources: new Set(),
+  openEarlier: new Set(),
+  articles: new Map(),
 };
 
-const topicList = document.querySelector('#topic-list');
-const laneTabs = document.querySelector('#lane-tabs');
-const article = document.querySelector('#article');
+const contents = document.querySelector('#contents');
+const digest = document.querySelector('#digest');
+const earlier = document.querySelector('#earlier');
 const generatedAt = document.querySelector('#generated-at');
 
-const LANES = [
-  { id: 'takes', label: 'Takes' },
-  { id: 'news', label: 'Newswire' },
-  { id: 'research', label: 'Research' },
-  { id: 'all', label: 'All' },
-];
+const LANE_LABELS = { takes: 'Takes', news: 'News', research: 'Research' };
 
 async function boot() {
-  const data = await fetch('/data/topics.json', { cache: 'no-cache' }).then((response) => response.json());
-  state.topics = data.topics ?? [];
-  const params = new URL(location.href).searchParams;
-  const requestedLane = params.get('lane');
-  const requestedTopic = params.get('topic');
-  if (LANES.some((lane) => lane.id === requestedLane)) state.lane = requestedLane;
-  if (!requestedLane && requestedTopic) {
-    state.lane = state.topics.find((topic) => topic.slug === requestedTopic)?.lane ?? state.lane;
-  }
-  if (!requestedLane && !requestedTopic) state.lane = defaultLane();
-  const visible = visibleTopics();
-  state.selectedSlug = requestedTopic || visible[0]?.slug || state.topics[0]?.slug || null;
+  await refresh(true);
+  const requested = new URL(location.href).searchParams.get('story');
+  if (requested) document.getElementById(`story-${requested}`)?.scrollIntoView({ block: 'start' });
+  setInterval(() => refresh().catch(() => {}), REFRESH_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refresh().catch(() => {});
+  });
+}
+
+async function refresh(initial = false) {
+  const data = await fetch('/data/digest.json', { cache: 'no-cache' }).then((response) => response.json());
+  if (!initial && data.generatedAt === state.generatedAt) return;
+  state.generatedAt = data.generatedAt;
+  state.stories = data.stories ?? [];
+  state.earlier = data.earlier ?? [];
+  state.articles.clear();
   generatedAt.textContent = data.generatedAt ? `Updated ${formatTime(data.generatedAt)}` : 'No run yet';
-  renderLaneTabs();
-  renderTopics();
-  await renderArticle();
+  render();
 }
 
-function visibleTopics() {
-  if (state.lane === 'all') return state.topics;
-  return state.topics.filter((topic) => (topic.lane ?? 'news') === state.lane);
+function render() {
+  renderContents();
+  renderDigest();
+  renderEarlier();
 }
 
-function defaultLane() {
-  for (const lane of ['takes', 'news', 'research']) {
-    if (state.topics.some((topic) => (topic.lane ?? 'news') === lane)) return lane;
-  }
-  return 'all';
-}
-
-function renderLaneTabs() {
-  const counts = state.topics.reduce((acc, topic) => {
-    const lane = topic.lane ?? 'news';
-    acc[lane] = (acc[lane] ?? 0) + 1;
-    acc.all += 1;
-    return acc;
-  }, { all: 0 });
-
-  laneTabs.innerHTML = LANES.map((lane) => `
-    <button class="lane-tab" data-lane="${lane.id}" aria-current="${lane.id === state.lane}">
-      <span>${lane.label}</span>
-      <span>${counts[lane.id] ?? 0}</span>
-    </button>
-  `).join('');
-
-  for (const button of laneTabs.querySelectorAll('button')) {
-    button.addEventListener('click', async () => {
-      state.lane = button.dataset.lane;
-      const visible = visibleTopics();
-      if (!visible.some((topic) => topic.slug === state.selectedSlug)) {
-        state.selectedSlug = visible[0]?.slug || state.topics[0]?.slug || null;
-      }
-      replaceUrl();
-      renderLaneTabs();
-      renderTopics();
-      await renderArticle();
-    });
-  }
-}
-
-function renderTopics() {
-  const topics = visibleTopics();
-  if (topics.length === 0) {
-    topicList.innerHTML = `<p class="empty">No ${escapeHtml(laneLabel(state.lane).toLowerCase())} topics in this run.</p>`;
+function renderContents() {
+  if (state.stories.length < 2) {
+    contents.innerHTML = '';
     return;
   }
-  topicList.innerHTML = topics.map((topic) => `
-    <button class="topic-button" data-slug="${escapeHtml(topic.slug)}" aria-current="${topic.slug === state.selectedSlug}">
-      <p class="topic-title">${escapeHtml(topic.title)}</p>
-      <div class="topic-meta">
-        <span class="heat">Heat ${topic.hotness}</span>
-        <span>${escapeHtml(modeLabel(topic.mode))}</span>
-        <span>${topic.sourceCount} sources</span>
-        <span>${escapeHtml((topic.sources ?? []).slice(0, 2).join(', '))}</span>
-      </div>
-    </button>
-  `).join('');
-
-  for (const button of topicList.querySelectorAll('button')) {
-    button.addEventListener('click', async () => {
-      state.selectedSlug = button.dataset.slug;
-      replaceUrl();
-      renderTopics();
-      await renderArticle();
-    });
-  }
-}
-
-async function renderArticle() {
-  if (!state.selectedSlug) {
-    article.innerHTML = '<p class="empty">No topic selected.</p>';
-    return;
-  }
-  const topic = await fetch(`/data/articles/${state.selectedSlug}.json`, { cache: 'no-cache' })
-    .then((response) => response.json());
-
-  const bodyHtml = topic.body
-    ? `<div class="body">${renderMarkdown(topic.body)}</div>`
-    : renderLegacyBody(topic);
-
-  article.innerHTML = `
-    <h2>${escapeHtml(topic.title)}</h2>
-    <div class="topic-meta">
-      <span class="heat">Heat ${topic.hotness}</span>
-      <span>${escapeHtml(laneLabel(topic.lane))}</span>
-      <span>${escapeHtml(modeLabel(topic.mode))}</span>
-      <span>${formatTime(topic.updatedAt)}</span>
-    </div>
-
-    ${bodyHtml}
-
-    <section class="article-section sources-section">
-      <h3>Sources</h3>
-      <div class="sources">
-        ${(topic.sources ?? []).map(renderSource).join('')}
-      </div>
-    </section>
+  contents.innerHTML = `
+    <h2>In this digest</h2>
+    <ol>
+      ${state.stories.map((story) => `
+        <li>
+          <a href="#story-${escapeAttribute(story.slug)}">${escapeHtml(story.title)}</a>
+          ${storyBadge(story)}
+        </li>
+      `).join('')}
+    </ol>
   `;
 }
 
-// Back-compat for any cached article saved before the roundup `body` field existed.
-function renderLegacyBody(topic) {
-  const parts = [topic.whyHot, topic.shortTake, topic.balancedTake].filter(Boolean);
-  if (!parts.length) return '';
-  return `<div class="body">${parts.map((text) => `<p>${escapeHtml(text)}</p>`).join('')}</div>`;
+function renderDigest() {
+  if (state.stories.length === 0) {
+    digest.innerHTML = '<p class="empty">No stories yet. The next worker run will fill this in.</p>';
+    return;
+  }
+  digest.innerHTML = state.stories.map(renderStory).join('');
+
+  for (const details of digest.querySelectorAll('details[data-sources]')) {
+    details.addEventListener('toggle', () => {
+      const slug = details.dataset.sources;
+      if (details.open) {
+        state.openSources.add(slug);
+        loadSources(slug, details.querySelector('.sources'));
+      } else {
+        state.openSources.delete(slug);
+      }
+    });
+  }
+}
+
+function renderStory(story, position) {
+  const isLead = position === 0;
+  const updates = renderUpdates(story.updates);
+  return `
+    <article class="story${isLead ? ' lead' : ''}" id="story-${escapeAttribute(story.slug)}">
+      <div class="story-meta">
+        <time datetime="${escapeHtml(story.updatedAt)}">${formatTime(story.updatedAt)}</time>
+        ${storyBadge(story)}
+        <span class="chip">${escapeHtml(LANE_LABELS[story.lane] ?? 'News')}</span>
+        <span class="names">${escapeHtml((story.sources ?? []).slice(0, 3).join(' · '))}</span>
+      </div>
+      <h2 class="headline">${escapeHtml(story.title)}</h2>
+      ${story.summary ? `<p class="standfirst">${escapeHtml(story.summary)}</p>` : ''}
+      ${story.body ? `<div class="body">${renderMarkdown(story.body)}</div>` : ''}
+      ${updates}
+      <details class="sources-details" data-sources="${escapeAttribute(story.slug)}"${state.openSources.has(story.slug) ? ' open' : ''}>
+        <summary>Sources (${story.sourceCount})</summary>
+        <div class="sources"><p class="empty">Loading...</p></div>
+      </details>
+    </article>
+  `;
+}
+
+function storyBadge(story) {
+  const now = Date.now();
+  if (story.createdAt && now - Date.parse(story.createdAt) < RECENT_MS) {
+    return '<span class="badge new">New</span>';
+  }
+  const update = (story.updates ?? []).at(-1);
+  if (update && now - Date.parse(update.at) < RECENT_MS) {
+    return `<span class="badge updated">Updated +${update.added}</span>`;
+  }
+  return '';
+}
+
+function renderUpdates(updates = []) {
+  const recent = [...updates].reverse().slice(0, 4);
+  if (recent.length === 0) return '';
+  return `
+    <p class="update-line">
+      ${recent.map((update) => `<span><time>${formatTimeShort(update.at)}</time> +${update.added} from ${escapeHtml((update.sources ?? []).join(', '))}</span>`).join('')}
+    </p>
+  `;
+}
+
+function renderEarlier() {
+  if (state.earlier.length === 0) {
+    earlier.innerHTML = '';
+    return;
+  }
+  earlier.innerHTML = `
+    <h2>Earlier this week</h2>
+    ${state.earlier.map((story) => `
+      <details class="earlier-story" data-earlier="${escapeAttribute(story.slug)}"${state.openEarlier.has(story.slug) ? ' open' : ''}>
+        <summary>
+          <span class="earlier-title">${escapeHtml(story.title)}</span>
+          <span class="earlier-meta">${formatTimeShort(story.updatedAt)}</span>
+        </summary>
+        <div class="earlier-body"><p class="empty">Loading...</p></div>
+      </details>
+    `).join('')}
+  `;
+
+  for (const details of earlier.querySelectorAll('details[data-earlier]')) {
+    details.addEventListener('toggle', () => {
+      const slug = details.dataset.earlier;
+      if (details.open) {
+        state.openEarlier.add(slug);
+        loadEarlierBody(slug, details.querySelector('.earlier-body'));
+      } else {
+        state.openEarlier.delete(slug);
+      }
+    });
+  }
+}
+
+async function fetchArticle(slug) {
+  if (!state.articles.has(slug)) {
+    const article = await fetch(`/data/articles/${slug}.json`, { cache: 'no-cache' })
+      .then((response) => response.json());
+    state.articles.set(slug, article);
+  }
+  return state.articles.get(slug);
+}
+
+async function loadSources(slug, container) {
+  try {
+    const article = await fetchArticle(slug);
+    container.innerHTML = (article.sources ?? []).map(renderSource).join('') || '<p class="empty">No sources recorded.</p>';
+  } catch {
+    container.innerHTML = '<p class="empty">Could not load sources.</p>';
+  }
+}
+
+async function loadEarlierBody(slug, container) {
+  try {
+    const article = await fetchArticle(slug);
+    container.innerHTML = `
+      ${article.summary ? `<p class="standfirst">${escapeHtml(article.summary)}</p>` : ''}
+      ${article.body ? `<div class="body">${renderMarkdown(article.body)}</div>` : ''}
+      <div class="sources">${(article.sources ?? []).map(renderSource).join('')}</div>
+    `;
+  } catch {
+    container.innerHTML = '<p class="empty">Could not load this story.</p>';
+  }
 }
 
 function renderSource(source) {
@@ -196,24 +241,6 @@ function renderInline(text) {
   return out;
 }
 
-function replaceUrl() {
-  const params = new URLSearchParams();
-  if (state.lane !== 'takes') params.set('lane', state.lane);
-  if (state.selectedSlug) params.set('topic', state.selectedSlug);
-  const query = params.toString();
-  history.replaceState(null, '', query ? `?${query}` : location.pathname);
-}
-
-function laneLabel(lane = 'news') {
-  return LANES.find((item) => item.id === lane)?.label ?? 'Newswire';
-}
-
-function modeLabel(mode = 'digest') {
-  if (mode === 'model') return 'Brief';
-  if (mode === 'digest' || mode === 'deterministic') return 'Digest';
-  return mode;
-}
-
 function formatTime(input) {
   if (!input) return '';
   return new Intl.DateTimeFormat(undefined, {
@@ -222,6 +249,16 @@ function formatTime(input) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(input));
+}
+
+function formatTimeShort(input) {
+  if (!input) return '';
+  const date = new Date(input);
+  const today = new Date();
+  const options = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate()
+    ? { hour: 'numeric', minute: '2-digit' }
+    : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+  return new Intl.DateTimeFormat(undefined, options).format(date);
 }
 
 function escapeHtml(input = '') {
@@ -238,5 +275,5 @@ function escapeAttribute(input = '') {
 }
 
 boot().catch((error) => {
-  article.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
+  digest.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
 });

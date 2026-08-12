@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureDir, resolveFromRoot } from './paths.js';
-import { readSources, readTopics } from './db.js';
+import { readSources, readStories } from './db.js';
 
 export function buildSite(db, config) {
   const publicDir = ensureDir(resolveFromRoot('public'));
@@ -14,38 +14,68 @@ export function buildSite(db, config) {
     fs.copyFileSync(resolveFromRoot('site', file), path.join(publicDir, file));
   }
 
-  const topics = readTopics(db);
-  const sources = readSources(db);
-  const topicIndex = topics.map((topic) => ({
-    id: topic.id,
-    slug: topic.slug,
-    title: topic.title,
-    hotness: topic.hotness,
-    updatedAt: topic.updatedAt,
-    lane: topic.article.lane ?? 'news',
-    mode: topic.article.mode ?? 'digest',
-    summary: topic.article.summary ?? topic.article.shortTake,
-    whyHot: topic.article.whyHot,
-    shortTake: topic.article.shortTake,
-    sourceCount: topic.article.sources?.length ?? 0,
-    sourceKinds: [...new Set((topic.article.sources ?? []).map((source) => source.sourceKind))].slice(0, 5),
-    sources: [...new Set((topic.article.sources ?? []).map((source) => source.source))].slice(0, 5),
+  const settings = config.settings;
+  const stories = readStories(db);
+  const now = Date.now();
+  const frontPageMs = (settings.frontPageHours ?? 48) * 3_600_000;
+  const earlierMs = (settings.earlierHours ?? 168) * 3_600_000;
+
+  // The digest page: the hottest stories that moved recently, importance
+  // first, like an edition. Everything else recent lands in a compact
+  // "Earlier" list so quiet-but-alive stories stay reachable.
+  const moving = stories.filter((story) => now - Date.parse(story.updatedAt) <= frontPageMs);
+  const front = [...moving]
+    .sort((a, b) => b.hotness - a.hotness)
+    .slice(0, settings.frontPageStories ?? 12);
+  const frontSlugs = new Set(front.map((story) => story.slug));
+  const earlier = stories.filter((story) =>
+    !frontSlugs.has(story.slug) && now - Date.parse(story.updatedAt) <= earlierMs);
+
+  const index = front.map((story) => ({
+    slug: story.slug,
+    title: story.title,
+    lane: story.lane,
+    hotness: story.hotness,
+    mode: story.article?.mode ?? 'digest',
+    createdAt: story.createdAt,
+    updatedAt: story.updatedAt,
+    summary: story.article?.summary ?? story.article?.shortTake ?? '',
+    body: story.article?.body ?? '',
+    updates: (story.updates ?? []).slice(-6),
+    sourceCount: story.article?.sources?.length ?? story.items.length,
+    sources: [...new Set(story.items.map((item) => item.sourceTitle))].slice(0, 4),
   }));
 
-  fs.writeFileSync(path.join(dataDir, 'topics.json'), JSON.stringify({
+  const earlierIndex = earlier.map((story) => ({
+    slug: story.slug,
+    title: story.title,
+    lane: story.lane,
+    updatedAt: story.updatedAt,
+    summary: story.article?.summary ?? story.article?.shortTake ?? '',
+  }));
+
+  fs.writeFileSync(path.join(dataDir, 'digest.json'), JSON.stringify({
     generatedAt: new Date().toISOString(),
-    title: config.settings.title,
-    description: config.settings.description,
-    topics: topicIndex,
+    title: settings.title,
+    description: settings.description,
+    stories: index,
+    earlier: earlierIndex,
   }, null, 2));
 
   fs.writeFileSync(path.join(dataDir, 'sources.json'), JSON.stringify({
     generatedAt: new Date().toISOString(),
-    sources,
+    sources: readSources(db),
   }, null, 2));
 
-  for (const topic of topics) {
-    fs.writeFileSync(path.join(articlesDir, `${topic.slug}.json`), JSON.stringify(topic.article, null, 2));
+  // Every retained story keeps an article file: the page lazy-loads sources
+  // and "Earlier" bodies from here, and deep links outlive the front page.
+  for (const story of stories) {
+    fs.writeFileSync(path.join(articlesDir, `${story.slug}.json`), JSON.stringify({
+      ...story.article,
+      createdAt: story.createdAt,
+      updatedAt: story.updatedAt,
+      updates: story.updates ?? [],
+    }, null, 2));
   }
 
   fs.writeFileSync(path.join(publicDir, '_headers'), [
@@ -56,5 +86,5 @@ export function buildSite(db, config) {
     '',
   ].join('\n'));
 
-  console.log(`[build] wrote ${topicIndex.length} topics to ${publicDir}`);
+  console.log(`[build] wrote ${index.length} digest stories + ${earlierIndex.length} earlier (${stories.length} tracked) to ${publicDir}`);
 }

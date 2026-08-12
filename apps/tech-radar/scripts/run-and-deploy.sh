@@ -2,18 +2,18 @@
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TOPICS_JSON="$APP_DIR/public/data/topics.json"
+DIGEST_JSON="$APP_DIR/public/data/digest.json"
 BEFORE=0
 
-if [[ -f "$TOPICS_JSON" ]]; then
-  BEFORE="$(stat -c %Y "$TOPICS_JSON" 2>/dev/null || stat -f %m "$TOPICS_JSON")"
+if [[ -f "$DIGEST_JSON" ]]; then
+  BEFORE="$(stat -c %Y "$DIGEST_JSON" 2>/dev/null || stat -f %m "$DIGEST_JSON")"
 fi
 
 npm run worker -w @claude-sandbox/tech-radar
 
 AFTER=0
-if [[ -f "$TOPICS_JSON" ]]; then
-  AFTER="$(stat -c %Y "$TOPICS_JSON" 2>/dev/null || stat -f %m "$TOPICS_JSON")"
+if [[ -f "$DIGEST_JSON" ]]; then
+  AFTER="$(stat -c %Y "$DIGEST_JSON" 2>/dev/null || stat -f %m "$DIGEST_JSON")"
 fi
 
 if [[ "$AFTER" -gt "$BEFORE" ]]; then
@@ -26,5 +26,5 @@ if [[ "$AFTER" -gt "$BEFORE" ]]; then
       ;;
   esac
 else
-  echo "No new Tech Radar build; skipping deploy."
+  echo "No new Tech Digest build; skipping deploy."
 fi

@@ -28,6 +28,8 @@ export function stripHtml(html = '') {
     .replace(/<\/p>/gi, '\n')
     .replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;/g, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => decodeCodePoint(parseInt(hex, 16), match))
+    .replace(/&#(\d+);/g, (match, dec) => decodeCodePoint(Number(dec), match))
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -35,6 +37,11 @@ export function stripHtml(html = '') {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function decodeCodePoint(codePoint, fallback) {
+  if (!Number.isInteger(codePoint) || codePoint < 32 || codePoint > 0x10ffff) return fallback;
+  return String.fromCodePoint(codePoint);
 }
 
 export function excerpt(text = '', max = 360) {

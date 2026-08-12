@@ -3,15 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tech Radar</title>
+    <title>Tech Digest</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <main class="shell">
-      <header class="topbar">
+      <header class="masthead">
         <div>
-          <p class="eyebrow">Rolling briefings</p>
-          <h1>Tech Radar</h1>
+          <p class="eyebrow">Rolling briefing</p>
+          <h1>Tech Digest</h1>
+          <p class="tagline">The tech discourse, written up as it happens. Stories update in place.</p>
         </div>
         <div class="status">
           <span class="dot"></span>
@@ -19,15 +20,19 @@
         </div>
       </header>
 
-      <section class="layout">
-        <aside class="rail" aria-label="Topics">
-          <div class="lane-tabs" id="lane-tabs" aria-label="Topic lanes"></div>
-          <div class="topic-list" id="topic-list"></div>
-        </aside>
-        <article class="article" id="article">
-          <p class="empty">Loading topics...</p>
-        </article>
+      <nav class="contents" id="contents" aria-label="In this digest"></nav>
+
+      <section class="digest" id="digest" aria-label="Stories">
+        <p class="empty">Loading the digest...</p>
       </section>
+
+      <section class="earlier" id="earlier" aria-label="Earlier stories"></section>
+
+      <footer class="colophon">
+        Rebuilt roughly every half hour from tech Twitter, Hacker News, Lobsters,
+        arXiv, lab and developer blogs, and the commentary circuit. Stories keep
+        their place and gain updates as the discourse moves.
+      </footer>
     </main>
     <script src="/app.js" type="module"></script>
   </body>

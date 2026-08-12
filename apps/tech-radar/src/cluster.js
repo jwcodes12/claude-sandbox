@@ -140,7 +140,7 @@ function bestPathTitle(pathname = '') {
     .find((segment) => segment.length > 8 && !/^\d+$/.test(segment) && !generic.has(segment.toLowerCase())) ?? '';
 }
 
-function scoreItem(item) {
+export function scoreItem(item) {
   const ageHours = Math.max(0, (Date.now() - Date.parse(item.publishedAt ?? item.fetchedAt)) / 3_600_000);
   const recency = 1 / (1 + ageHours / 18);
   return recency * Number(item.sourceWeight ?? 1);
